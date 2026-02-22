@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chalkboard Writing Animation</title>
+  <link href="https://fonts.googleapis.com/css2?family=Gochi+Hand&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --chalk-white: rgba(255, 255, 255, 0.85);
+      --chalk-yellow: rgba(255, 223, 0, 0.85);
+      --chalk-green: rgba(144, 238, 144, 0.85);
+      --chalk-red: rgba(255, 99, 71, 0.85);
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background-color: #1a1a1a;
+      font-family: 'Gochi Hand', cursive;
+    }
+
+    .chalkboard {
+      position: relative;
+      width: 90%;
+      max-width: 800px;
+      height: 500px;
+      background-color: #2b2f32;
+      border: 16px solid #d4a373;
+      border-radius: 8px;
+      box-shadow: 
+        inset 0 0 30px rgba(0,0,0,0.8),
+        10px 10px 0 rgba(0,0,0,0.5);
+      overflow: hidden;
+      padding: 40px;
+      box-sizing: border-box;
+    }
+
+    /* Chalk dust texture */
+    .chalkboard::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-image: 
+        radial-gradient(circle at 20% 30%, rgba(255,255,255,0.03) 0%, transparent 25%),
+        radial-gradient(circle at 80% 70%, rgba(255,255,255,0.02) 0%, transparent 30%),
+        radial-gradient(circle at 50% 40%, rgba(255,255,255,0.01) 0%, transparent 40%);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* Eraser smudges */
+    .chalkboard::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: 
+        radial-gradient(ellipse at 30% 40%, rgba(255,255,255,0.04) 0%, transparent 40%),
+        radial-gradient(ellipse at 70% 60%, rgba(255,255,255,0.03) 0%, transparent 50%);
+      filter: blur(20px);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .content {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* SVG Styling for Chalk Effect */
+    svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .chalk-path {
+      fill: none;
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      /* SVG filter applied via HTML for texture */
+      filter: url(#chalk-texture);
+    }
+
+    .text-white { stroke: var(--chalk-white); }
+    .text-yellow { stroke: var(--chalk-yellow); }
+    .text-green { stroke: var(--chalk-green); }
+    .text-red { stroke: var(--chalk-red); }
+
+    /* Animation Classes */
+    .draw-path {
+      stroke-dasharray: 1000;
+      stroke-dashoffset: 1000;
+      animation: draw 2s ease-out forwards;
+    }
+
+    .draw-fast { animation-duration: 1s; }
+    .draw-slow { animation-duration: 3s; }
+
+    /* Delays */
+    .delay-1 { animation-delay: 0.5s; }
+    .delay-2 { animation-delay: 1.5s; }
+    .delay-3 { animation-delay: 2.5s; }
+    .delay-4 { animation-delay: 4.0s; }
+    .delay-5 { animation-delay: 5.5s; }
+
+    @keyframes draw {
+      to {
+        stroke-dashoffset: 0;
+      }
+    }
+
+    /* Fallback text for accessibility (hidden visually) */
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border-width: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="chalkboard">
+    <div class="content">
+      
+      <!-- SVG Filters for Chalk Texture -->
+      <svg class="sr-only">
+        <defs>
+          <filter id="chalk-texture" x="-10%" y="-10%" width="120%" height="120%">
+            <!-- Generate noise -->
+            <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" result="noise" />
+            <!-- Displace the stroke using the noise to create rough edges -->
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="2" xChannelSelector="R" yChannelSelector="G" result="displaced" />
+            <!-- Slightly blur to soften the chalk -->
+            <feGaussianBlur in="displaced" stdDeviation="0.5" result="blurred" />
+            <!-- Merge original with blurred for chalky core -->
+            <feMerge>
+              <feMergeNode in="blurred" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+      </svg>
+
+      <!-- Main Drawing SVG -->
+      <svg viewBox="0 0 800 400" preserveAspectRatio="xMidYMid meet">
+        
+        <!-- 1. Endpoint: POST /upload -->
+        <g class="draw-path delay-1 text-white">
+          <!-- P -->
+          <path d="M 50,50 L 50,90 M 50,50 C 70,50 70,70 50,70" />
+          <!-- O -->
+          <path d="M 80,70 C 80,50 100,50 100,70 C 100,90 80,90 80,70" />
+          <!-- S -->
+          <path d="M 130,55 C 110,50 110,70 120,70 C 130,70 130,90 110,85" />
+          <!-- T -->
+          <path d="M 140,50 L 170,50 M 155,50 L 155,90" />
+          
+          <!-- / -->
+          <path d="M 190,90 L 210,45" />
+          
+          <!-- u -->
+          <path d="M 220,60 L 220,85 C 220,95 240,95 240,85 L 240,60" />
+          <!-- p -->
+          <path d="M 250,60 L 250,100 M 250,65 C 270,60 270,85 250,85" />
+          <!-- l -->
+          <path d="M 280,45 L 280,90" />
+          <!-- o -->
+          <path d="M 295,75 C 295,60 315,60 315,75 C 315,90 295,90 295,75" />
+          <!-- a -->
+          <path d="M 340,75 C 340,60 320,60 320,75 C 320,90 340,90 340,75 M 340,60 L 340,90" />
+          <!-- d -->
+          <path d="M 370,75 C 370,60 350,60 350,75 C 350,90 370,90 370,75 M 370,45 L 370,90" />
+        </g>
+
+        <!-- 2. File Size Badge (48.2 MB) -->
+        <g class="draw-path delay-2 text-yellow">
+          <!-- Box -->
+          <path d="M 420,55 L 520,55 C 525,55 525,85 520,85 L 420,85 C 415,85 415,55 420,55 Z" stroke-dasharray="400" stroke-dashoffset="400" />
+          <!-- 4 -->
+          <path d="M 435,60 L 430,75 L 445,75 M 440,60 L 440,80" />
+          <!-- 8 -->
+          <path d="M 455,65 C 455,55 465,55 465,65 C 465,75 455,75 455,65 C 455,85 465,85 465,75 C 465,65 455,65 455,75" />
+          <!-- . -->
+          <path d="M 470,80 L 471,80" stroke-width="5" />
+          <!-- 2 -->
+          <path d="M 475,65 C 475,55 485,55 485,65 C 485,75 475,75 475,80 L 485,80" />
+          <!-- M -->
+          <path d="M 495,80 L 495,60 L 500,70 L 505,60 L 505,80" />
+          <!-- B -->
+          <path d="M 510,60 L 510,80 M 510,60 C 520,60 520,70 510,70 C 520,70 520,80 510,80" />
+        </g>
+
+        <!-- 3. Progress Bar Outline -->
+        <g class="draw-path delay-3 text-white">
+          <path d="M 50,150 L 750,150 L 750,180 L 50,180 Z" />
+        </g>
+
+        <!-- 4. Progress Bar Fill (Hachure/Scribble pattern) -->
+        <g class="draw-path draw-slow delay-4 text-green">
+          <!-- Manual scribbles to simulate chalk shading -->
+          <path d="M 55,175 L 70,155 M 65,175 L 80,155 M 75,175 L 90,155 M 85,175 L 100,155 M 95,175 L 110,155 M 105,175 L 120,155 M 115,175 L 130,155 M 125,175 L 140,155 M 135,175 L 150,155 M 145,175 L 160,155 M 155,175 L 170,155 M 165,175 L 180,155 M 175,175 L 190,155 M 185,175 L 200,155 M 195,175 L 210,155 M 205,175 L 220,155 M 215,175 L 230,155 M 225,175 L 240,155 M 235,175 L 250,155 M 245,175 L 260,155 M 255,175 L 270,155 M 265,175 L 280,155 M 275,175 L 290,155 M 285,175 L 300,155 M 295,175 L 310,155 M 305,175 L 320,155 M 315,175 L 330,155 M 325,175 L 340,155 M 335,175 L 350,155 M 345,175 L 360,155 M 355,175 L 370,155 M 365,175 L 380,155 M 375,175 L 390,155 M 385,175 L 400,155 M 395,175 L 410,155 M 405,175 L 420,155 M 415,175 L 430,155 M 425,175 L 440,155 M 435,175 L 450,155 M 445,175 L 460,155 M 455,175 L 470,155 M 465,175 L 480,155 M 475,175 L 490,155 M 485,175 L 500,155 M 495,175 L 510,155 M 505,175 L 520,155 M 515,175 L 530,155 M 525,175 L 540,155 M 535,175 L 550,155 M 545,175 L 560,155 M 555,175 L 570,155 M 565,175 L 580,155 M 575,175 L 590,155 M 585,175 L 600,155 M 595,175 L 610,155 M 605,175 L 620,155 M 615,175 L 630,155 M 625,175 L 640,155 M 635,175 L 650,155 M 645,175 L 660,155 M 655,175 L 670,155 M 665,175 L 680,155 M 675,175 L 690,155 M 685,175 L 700,155 M 695,175 L 710,155 M 705,175 L 720,155 M 715,175 L 730,155 M 725,175 L 740,155" stroke-width="4" />
+        </g>
+
+        <!-- 5. Output URL -->
+        <g class="draw-path delay-5 text-white">
+          <!-- > -->
+          <path d="M 50,240 L 70,250 L 50,260" />
+          
+          <!-- D -->
+          <path d="M 90,230 L 90,270 M 90,230 C 110,230 110,270 90,270" />
+          <!-- o -->
+          <path d="M 130,250 C 130,235 115,235 115,250 C 115,265 130,265 130,250" />
+          <!-- n -->
+          <path d="M 140,240 L 140,270 M 140,245 C 155,235 155,270 155,270" />
+          <!-- e -->
+          <path d="M 165,255 L 185,255 C 185,235 165,235 165,250 C 165,265 185,265 185,265" />
+          <!-- ! -->
+          <path d="M 195,235 L 195,260 M 195,270 L 196,270" stroke-width="4" />
+
+          <!-- URL Line -->
+          <path d="M 50,300 L 750,300" stroke-dasharray="10, 10" class="text-yellow" />
+          
+          <!-- c -->
+          <path d="M 70,290 C 70,275 50,275 50,290 C 50,305 70,305 70,290" />
+          <!-- i -->
+          <path d="M 90,280 L 90,290 M 90,270 L 91,270" stroke-width="4" />
+          <!-- p -->
+          <path d="M 100,280 L 100,310 M 100,285 C 115,280 115,300 100,300" />
+          <!-- h -->
+          <path d="M 125,270 L 125,300 M 125,285 C 140,280 140,300 140,300" />
+          <!-- e -->
+          <path d="M 150,290 L 165,290 C 165,275 150,275 150,285 C 150,300 165,300 165,300" />
+          <!-- r -->
+          <path d="M 175,280 L 175,300 M 175,285 C 185,280 190,285 190,285" />
+          
+          <!-- . -->
+          <path d="M 200,300 L 201,300" stroke-width="4" />
+          
+          <!-- i -->
+          <path d="M 215,280 L 215,300 M 215,270 L 216,270" stroke-width="4" />
+          <!-- o -->
+          <path d="M 240,290 C 240,275 225,275 225,290 C 225,305 240,305 240,290" />
+          
+          <!-- / -->
+          <path d="M 255,305 L 265,275" />
+          
+          <!-- r -->
+          <path d="M 280,280 L 280,300 M 280,285 C 290,280 295,285 295,285" />
+          <!-- e -->
+          <path d="M 305,290 L 320,290 C 320,275 305,275 305,285 C 305,300 320,300 320,300" />
+          <!-- p -->
+          <path d="M 330,280 L 330,310 M 330,285 C 345,280 345,300 330,300" />
+          <!-- o -->
+          <path d="M 365,290 C 365,275 350,275 350,290 C 350,305 365,305 365,290" />
+          <!-- r -->
+          <path d="M 375,280 L 375,300 M 375,285 C 385,280 390,285 390,285" />
+          <!-- t -->
+          <path d="M 405,275 L 405,300 M 395,285 L 415,285" />
+        </g>
+
+      </svg>
+    </div>
+  </div>
+
+  <script>
+    // Optional: JavaScript to restart animation on click
+    document.querySelector('.chalkboard').addEventListener('click', function() {
+      const paths = document.querySelectorAll('.draw-path');
+      paths.forEach(path => {
+        path.style.animation = 'none';
+        path.offsetHeight; /* trigger reflow */
+        path.style.animation = null; 
+      });
+    });
+  </script>
+</body>
+</html>

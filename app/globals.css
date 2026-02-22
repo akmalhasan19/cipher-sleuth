@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: "TBJ Goslap";
+  src: url("/fonts/TBJGoslap-TextNormalThin.ttf") format("truetype");
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "TBJ Goslap";
+  src: url("/fonts/TBJGoslap-TextNormalLight.ttf") format("truetype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "TBJ Goslap";
+  src: url("/fonts/TBJGoslap-TextNormalRegular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "TBJ Goslap";
+  src: url("/fonts/TBJGoslap-TextNormalMedium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "TBJ Goslap";
+  src: url("/fonts/TBJGoslap-TextNormalSemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "TBJ Goslap";
+  src: url("/fonts/TBJGoslap-TextNormalBold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "TBJ Goslap";
+  src: url("/fonts/TBJGoslap-TextNormalExtraBold.ttf") format("truetype");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --background: #245f4e;
+  --foreground: #b4b4b4;
+  --font-tbj-goslap: "TBJ Goslap";
+}
+
+/* Utility class to apply the chalk handwriting font */
+.chalk-font {
+  font-family: var(--font-creamy-chalk), var(--font-tbj-goslap), cursive;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-tbj-goslap);
+  --font-mono: var(--font-tbj-goslap);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-tbj-goslap), sans-serif;
+  font-weight: 500;
+}
+
+.brutalist-grid {
+  background-image: linear-gradient(to right, rgba(173, 255, 200, 0.019) 1px, transparent 0px),
+    linear-gradient(to bottom, rgba(173, 255, 200, 0.119) 1px, transparent 0px);
+  background-size: 34px 34px;
+}

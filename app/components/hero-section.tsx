@@ -395,7 +395,7 @@ export function HeroSection() {
   }, [handleIncomingFile]);
 
   return (
-    <section className="space-y-0 py-0">
+    <section className="space-y-3 py-0">
       {TURNSTILE_SITE_KEY ? (
         <Script
           id="turnstile-api"

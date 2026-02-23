@@ -16,29 +16,33 @@ function deriveIntegrityHeuristic(context: AgentRunContext): IntegrityHeuristic 
   const signals = context.forensicSignals;
   const matchedKeywords = signals.matchedKeywords.join(", ") || "none";
 
-  if (signals.hasVisualStrokeOverlayHint || signals.hasStrongTamperHint) {
+  if (signals.hasVisualStrokeOverlayHint) {
     return {
       watermarkIntegrity: 62,
       watermarkStatus: "damaged",
       trustDelta: -20,
       confidence: 0.91,
-      rationale: signals.hasVisualStrokeOverlayHint
-        ? `Visual overlay pattern indicates high integrity disruption (score=${signals.visualOverlayScore.toFixed(3)}).`
-        : `Strong tamper hints detected (${matchedKeywords}; source=${signals.hintSource}).`,
+      rationale: `Visual overlay pattern indicates high integrity disruption (score=${signals.visualOverlayScore.toFixed(3)}).`,
     };
   }
 
-  if (
-    signals.keywordHits > 0 ||
-    signals.hasXmpSignature ||
-    signals.hasAdobeSignature
-  ) {
+  if (signals.hasStrongTamperHint) {
     return {
-      watermarkIntegrity: 79,
+      watermarkIntegrity: 74,
       watermarkStatus: "partially-intact",
-      trustDelta: -8,
-      confidence: 0.84,
-      rationale: `Partial integrity concern due to metadata/editor hints (${matchedKeywords}; source=${signals.hintSource}).`,
+      trustDelta: -12,
+      confidence: 0.88,
+      rationale: `Corroborated tamper hints detected (${matchedKeywords}; source=${signals.hintSource}).`,
+    };
+  }
+
+  if (signals.keywordHits > 0) {
+    return {
+      watermarkIntegrity: 88,
+      watermarkStatus: "partially-intact",
+      trustDelta: -4,
+      confidence: 0.81,
+      rationale: `Light integrity concern due to uncorroborated metadata/editor hints (${matchedKeywords}; source=${signals.hintSource}).`,
     };
   }
 
@@ -53,6 +57,16 @@ function deriveIntegrityHeuristic(context: AgentRunContext): IntegrityHeuristic 
       trustDelta: -1,
       confidence: 0.83,
       rationale: "JPEG EXIF marker present with no tamper hint; integrity considered intact.",
+    };
+  }
+
+  if (signals.hasXmpSignature || signals.hasAdobeSignature) {
+    return {
+      watermarkIntegrity: 93,
+      watermarkStatus: "intact",
+      trustDelta: -1,
+      confidence: 0.79,
+      rationale: "XMP/Adobe metadata marker detected without corroborated tamper evidence.",
     };
   }
 

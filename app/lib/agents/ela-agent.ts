@@ -49,12 +49,16 @@ function deriveElaHeuristic(context: AgentRunContext): ElaHeuristic {
     anomalyScore = clamp(anomalyScore + 0.2, 0, 1);
     rationale = `ELA boosted by strong editor/tamper hints (${matchedKeywords}; source=${signals.hintSource}).`;
   } else if (signals.keywordHits > 0) {
-    anomalyScore = clamp(anomalyScore + 0.08, 0, 1);
-    rationale = `ELA adjusted by metadata/editor hints (${matchedKeywords}; source=${signals.hintSource}).`;
+    anomalyScore = clamp(anomalyScore + 0.05, 0, 1);
+    rationale = `ELA adjusted by weak metadata/editor hints (${matchedKeywords}; source=${signals.hintSource}).`;
   }
 
   if (signals.hasXmpSignature || signals.hasAdobeSignature) {
-    anomalyScore = clamp(anomalyScore + 0.05, 0, 1);
+    const isMetadataOnlyHint =
+      signals.keywordHits === 0 &&
+      !signals.hasVisualStrokeOverlayHint &&
+      !signals.hasStrongTamperHint;
+    anomalyScore = clamp(anomalyScore + (isMetadataOnlyHint ? 0.01 : 0.02), 0, 1);
   }
 
   if (ela.mode !== "computed" && anomalyScore < 0.25) {

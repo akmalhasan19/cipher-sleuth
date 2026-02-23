@@ -463,16 +463,19 @@ export function collectForensicSignals(
       ? "binary"
       : "none";
 
-  const hasStrongTamperHint =
-    mergedMatches.some((keyword) => STRONG_EDITOR_KEYWORDS.has(keyword)) ||
-    mergedMatches.length >= 2;
-
   const hasXmpSignature = ascii.text.includes("http://ns.adobe.com/xap/1.0/");
   const hasAdobeSignature =
     ascii.text.includes("adobe") ||
     ascii.text.includes("photoshop") ||
     ascii.text.includes("lightroom");
   const visualOverlay = analyzeVisualStrokeOverlay(input);
+  const strongKeywordHits = mergedMatches.filter((keyword) =>
+    STRONG_EDITOR_KEYWORDS.has(keyword)
+  ).length;
+  const hasCorroboratedKeywordTamperHint =
+    (strongKeywordHits >= 2 && hintSource === "both") || strongKeywordHits >= 3;
+  const hasStrongTamperHint =
+    visualOverlay.hasVisualStrokeOverlayHint || hasCorroboratedKeywordTamperHint;
 
   return {
     keywordHits: mergedMatches.length,

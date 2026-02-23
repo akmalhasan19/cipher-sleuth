@@ -1,6 +1,6 @@
 import type { AgentId } from "../agents/types";
 
-export const SCORING_MODEL_VERSION = "weighted-deterministic-v1" as const;
+export const SCORING_MODEL_VERSION = "weighted-deterministic-v2" as const;
 
 export type ScoringWeights = Record<AgentId, number>;
 

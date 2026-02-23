@@ -358,7 +358,11 @@ export function HeroSection() {
         agentResults: data.agentResults,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Analysis failed.";
+      const rawMessage = error instanceof Error ? error.message : "Analysis failed.";
+      const message =
+        rawMessage.includes("did not match the expected pattern")
+          ? "Failed to process image in this browser. Try a JPG, JPEG, PNG, or WEBP file."
+          : rawMessage;
       setAnalysisError(message);
       setAnalysisResult(null);
     } finally {

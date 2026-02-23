@@ -1,3 +1,5 @@
+import type { ForensicSignalSnapshot } from "./forensic-signals";
+
 export type AgentId = "exif-bot" | "noise-bot" | "dwt-svd-bot";
 
 export type AgentResult = {
@@ -17,8 +19,10 @@ export type AnalysisInput = {
   mimeType: string;
   fileSizeBytes: number;
   fileHashSha256: string;
+  fileBytes: Uint8Array;
 };
 
 export type AgentRunContext = AnalysisInput & {
   startedAt: number;
+  forensicSignals: ForensicSignalSnapshot;
 };

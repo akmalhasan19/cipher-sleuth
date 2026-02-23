@@ -426,6 +426,10 @@ export async function POST(request: Request) {
       }
     }
 
+    const fileBytes = new Uint8Array(
+      await parsedRequest.uploadedFile.arrayBuffer()
+    );
+
     const duplicateDetectionEnabled = env.ENABLE_DUPLICATE_DETECTION === "true";
     let duplicateLookupStatus = "skipped-disabled";
     let duplicateLookupError: string | null = null;
@@ -547,6 +551,7 @@ export async function POST(request: Request) {
       mimeType: validatedUpload.mimeType,
       fileSizeBytes: validatedUpload.fileSizeBytes,
       fileHashSha256: validatedUpload.fileHashSha256,
+      fileBytes,
     });
     const score = computeTrustScore(agentResults);
     const verdictLabel = toVerdictLabel(score.verdict);

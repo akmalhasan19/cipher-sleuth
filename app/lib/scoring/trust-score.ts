@@ -29,7 +29,7 @@ export type TrustScoreBreakdown = {
 
 export function computeTrustScore(agentResults: AgentResult[]): TrustScoreBreakdown {
   const perAgent = agentResults.map((result) => {
-    const rawPenalty = Math.abs(result.trustDelta);
+    const rawPenalty = Math.max(0, -result.trustDelta);
     const normalizedPenalty = Math.min(
       1,
       rawPenalty / SCORING_CONFIG.maxPenaltyPerAgent

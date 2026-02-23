@@ -31,18 +31,33 @@ export function buildReportSummary(
   finalTrustScore: number,
   agentResults: AgentResult[]
 ): string {
-  const strongestSignal = agentResults.reduce((current, candidate) =>
-    Math.abs(candidate.trustDelta) > Math.abs(current.trustDelta)
-      ? candidate
-      : current
-  );
+  const strongestRiskSignal = agentResults
+    .filter((agent) => agent.trustDelta < 0)
+    .reduce<AgentResult | null>(
+      (current, candidate) =>
+        current === null || candidate.trustDelta < current.trustDelta
+          ? candidate
+          : current,
+      null
+    );
 
-  return [
+  const lines = [
     "Deterministic synthesis mode active (no AI orchestrator).",
-    `Highest risk contributor: ${strongestSignal.agentName} (${strongestSignal.trustDelta}).`,
     `Final verdict: ${verdictLabel(verdict)}.`,
     `Trust score: ${finalTrustScore}/100.`,
-  ].join(" ");
+  ];
+
+  if (strongestRiskSignal) {
+    lines.splice(
+      1,
+      0,
+      `Highest risk contributor: ${strongestRiskSignal.agentName} (${strongestRiskSignal.trustDelta}).`
+    );
+  } else {
+    lines.splice(1, 0, "No material risk contributor was flagged by deterministic agents.");
+  }
+
+  return lines.join(" ");
 }
 
 export function buildDownloadableReportText(input: ReportInput): string {

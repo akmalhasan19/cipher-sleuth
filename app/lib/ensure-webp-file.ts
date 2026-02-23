@@ -1,11 +1,24 @@
 "use client";
 
+const DIRECT_UPLOAD_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const DIRECT_UPLOAD_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
+
 function isWebpFile(file: File): boolean {
   if (file.type === "image/webp") {
     return true;
   }
 
   return /\.webp$/i.test(file.name);
+}
+
+function hasDirectUploadExtension(fileName: string): boolean {
+  const lowerName = fileName.toLowerCase();
+  return DIRECT_UPLOAD_EXTENSIONS.some((ext) => lowerName.endsWith(ext));
+}
+
+function shouldUploadAsIs(file: File): boolean {
+  const mimeType = file.type?.toLowerCase() ?? "";
+  return DIRECT_UPLOAD_MIME_TYPES.has(mimeType) || hasDirectUploadExtension(file.name);
 }
 
 function toWebpFilename(fileName: string): string {
@@ -54,8 +67,12 @@ function canvasToWebpBlob(canvas: HTMLCanvasElement, quality: number): Promise<B
 }
 
 export async function ensureWebpFile(file: File, quality = 0.9): Promise<File> {
-  if (isWebpFile(file)) {
+  if (isWebpFile(file) || shouldUploadAsIs(file)) {
     return file;
+  }
+
+  if (!file.type?.startsWith("image/")) {
+    throw new Error("Unsupported file type. Use JPG, JPEG, PNG, or WEBP.");
   }
 
   const image = await loadImage(file);
@@ -72,8 +89,15 @@ export async function ensureWebpFile(file: File, quality = 0.9): Promise<File> {
   context.drawImage(image, 0, 0);
 
   const webpBlob = await canvasToWebpBlob(canvas, quality);
-  return new File([webpBlob], toWebpFilename(file.name), {
-    type: "image/webp",
-    lastModified: Date.now(),
-  });
+
+  try {
+    return new File([webpBlob], toWebpFilename(file.name), {
+      type: "image/webp",
+      lastModified: Date.now(),
+    });
+  } catch {
+    throw new Error(
+      "Failed to prepare image in this browser. Use JPG, JPEG, PNG, or WEBP."
+    );
+  }
 }

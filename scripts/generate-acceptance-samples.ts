@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { POST } from "../app/api/analyze/route";
 
@@ -12,38 +11,6 @@ type AnalyzePayload = {
   generatedAt: string;
 };
 
-function hashHex(content: string): string {
-  return createHash("sha256").update(Buffer.from(content, "utf8")).digest("hex");
-}
-
-function deriveElaAnomalyScore(fileHashSha256: string): number {
-  const sample = fileHashSha256.slice(0, 8);
-  const value = Number.parseInt(sample, 16);
-  return (value % 1000) / 1000;
-}
-
-function deriveIntegrity(fileHashSha256: string): number {
-  const sample = fileHashSha256.slice(-6);
-  const value = Number.parseInt(sample, 16);
-  return 70 + (value % 31);
-}
-
-function findContentByHashConstraints(
-  prefix: string,
-  predicate: (hash: string) => boolean,
-  maxAttempts = 50_000
-): { content: string; hash: string } {
-  for (let i = 0; i < maxAttempts; i += 1) {
-    const candidate = `${prefix}-${i}`;
-    const hash = hashHex(candidate);
-    if (predicate(hash)) {
-      return { content: candidate, hash };
-    }
-  }
-
-  throw new Error(`Unable to find suitable test payload for prefix ${prefix}.`);
-}
-
 function buildAnalyzeRequest(file: File): Request {
   const formData = new FormData();
   formData.append("file", file);
@@ -56,19 +23,12 @@ function buildAnalyzeRequest(file: File): Request {
 
 async function run() {
   const nonce = Date.now();
-
-  const authenticFixture = findContentByHashConstraints(
-    `authentic-${nonce}`,
-    (hash) => deriveElaAnomalyScore(hash) < 0.35 && deriveIntegrity(hash) >= 90
-  );
-  const manipulatedFixture = findContentByHashConstraints(
-    `manipulated-${nonce}`,
-    (hash) => deriveElaAnomalyScore(hash) >= 0.7 && deriveIntegrity(hash) < 75
-  );
+  const authenticContent = `camera-shot-${nonce}`;
+  const manipulatedContent = `deepfake-edit-${nonce}`;
 
   const authenticResponse = await POST(
     buildAnalyzeRequest(
-      new File([Buffer.from(authenticFixture.content, "utf8")], "camera-original.png", {
+      new File([Buffer.from(authenticContent, "utf8")], "camera-original.png", {
         type: "image/png",
       })
     )
@@ -78,7 +38,7 @@ async function run() {
   const manipulatedResponse = await POST(
     buildAnalyzeRequest(
       new File(
-        [Buffer.from(manipulatedFixture.content, "utf8")],
+        [Buffer.from(manipulatedContent, "utf8")],
         "photoshop-face-swap.png",
         {
           type: "image/png",
@@ -94,7 +54,7 @@ Generated on: ${new Date().toISOString()}
 
 ## Scenario A - Gambar Asli (expected >= 90)
 - Filename: \`camera-original.png\`
-- Hash constraints: ELA low (\`<0.35\`) + watermark intact (\`>=90\`) + no suspicious metadata signature
+- Deterministic signals: no editor/tamper hint pada filename + binary signature
 - File hash: \`${authenticPayload.fileHashSha256}\`
 - Source: \`${authenticPayload.source}\`
 - Final trust score: **${authenticPayload.finalTrustScore}**
@@ -103,7 +63,7 @@ Generated on: ${new Date().toISOString()}
 
 ## Scenario B - Gambar Manipulasi (expected < 50)
 - Filename: \`photoshop-face-swap.png\`
-- Hash constraints: ELA high (\`>=0.7\`) + watermark damaged (\`<75\`) + suspicious metadata signature (filename contains \`photoshop\`)
+- Deterministic signals: strong editor/tamper hint (keyword: \`photoshop\`, \`face-swap\`)
 - File hash: \`${manipulatedPayload.fileHashSha256}\`
 - Source: \`${manipulatedPayload.source}\`
 - Final trust score: **${manipulatedPayload.finalTrustScore}**

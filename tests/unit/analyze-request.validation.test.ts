@@ -40,4 +40,15 @@ describe("validateAndNormalizeUpload", () => {
     expect(result.fileSizeBytes).toBe(file.size);
     expect(result.fileHashSha256).toMatch(/^[a-f0-9]{64}$/);
   });
+
+  it("accepts supported extension when MIME type is empty", async () => {
+    const file = new File([Buffer.from("mobile-image")], "from-mobile.jpg", {
+      type: "",
+    });
+
+    const result = await validateAndNormalizeUpload(file, 5);
+
+    expect(result.mimeType).toBe("image/jpeg");
+    expect(result.filenameNormalized).toBe("from-mobile.webp");
+  });
 });

@@ -9,6 +9,12 @@ const SUPPORTED_MIME_TYPES = new Set([
 ]);
 
 const SUPPORTED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
+const MIME_BY_EXTENSION: Record<string, string> = {
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+};
 
 export const jsonAnalyzeSchema = z.object({
   filename: z.string().trim().min(1).max(260),
@@ -35,6 +41,28 @@ export type AccessContext = {
 function hasSupportedExtension(fileName: string): boolean {
   const lowerFileName = fileName.toLowerCase();
   return SUPPORTED_EXTENSIONS.some((ext) => lowerFileName.endsWith(ext));
+}
+
+function resolveMimeType(file: File): string {
+  const mimeType = file.type?.toLowerCase().trim() ?? "";
+  if (SUPPORTED_MIME_TYPES.has(mimeType)) {
+    return mimeType;
+  }
+
+  if (mimeType && mimeType !== "application/octet-stream") {
+    return mimeType;
+  }
+
+  const lowerFileName = file.name.toLowerCase();
+  const matchedExtension = SUPPORTED_EXTENSIONS.find((ext) =>
+    lowerFileName.endsWith(ext)
+  );
+
+  if (!matchedExtension) {
+    return mimeType;
+  }
+
+  return MIME_BY_EXTENSION[matchedExtension] ?? mimeType;
 }
 
 function toWebpFilename(fileName: string): string {
@@ -69,7 +97,7 @@ export async function validateAndNormalizeUpload(
     throw new Error("FILE_TOO_LARGE");
   }
 
-  const mimeType = file.type?.toLowerCase() ?? "";
+  const mimeType = resolveMimeType(file);
   if (!SUPPORTED_MIME_TYPES.has(mimeType) || !hasSupportedExtension(file.name)) {
     throw new Error("UNSUPPORTED_FILE_TYPE");
   }

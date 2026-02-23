@@ -14,6 +14,16 @@ const stripItems = [
   "Integrity Layer",
 ];
 
+type AnalysisResult = {
+  analysisId: string;
+  finalTrustScore: number;
+  verdictLabel: string;
+  reportSummary: string;
+  reportDownloadUrl: string;
+  fileHashSha256: string;
+  generatedAt: string;
+};
+
 function TypewriterLine({ text, delay = 0, speed = 50, className = "", start = false, loopDelay = 10000 }: { text: string, delay?: number, speed?: number, className?: string, start?: boolean, loopDelay?: number }) {
   const [displayedText, setDisplayedText] = useState("");
 
@@ -73,7 +83,7 @@ function GlitchText({ text }: { text: string }) {
     
     intervalRef.current = setInterval(() => {
       setDisplayText(() => 
-        text.split("").map((letter, index) => {
+        text.split("").map((_, index) => {
           if (index < iteration) return text[index];
           return chars[Math.floor(Math.random() * chars.length)];
         }).join("")
@@ -107,6 +117,9 @@ function GlitchText({ text }: { text: string }) {
 
 export function HeroSection() {
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [boardOverflowBottom, setBoardOverflowBottom] = useState(0);
   const boardAreaRef = useRef<HTMLDivElement | null>(null);
   const stickyNotesRef = useRef<HTMLDivElement | null>(null);
@@ -159,9 +172,39 @@ export function HeroSection() {
 
   const handleIncomingFile = async (inputFile: File) => {
     try {
-      await ensureWebpFile(inputFile);
-    } catch {
-      // Keep silent in UI; upload flow continues.
+      setIsAnalyzing(true);
+      setAnalysisError(null);
+
+      const webpFile = await ensureWebpFile(inputFile);
+      const formData = new FormData();
+      formData.append("file", webpFile);
+
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error ?? "Analysis failed.");
+      }
+
+      setAnalysisResult({
+        analysisId: data.analysisId,
+        finalTrustScore: data.finalTrustScore,
+        verdictLabel: data.verdictLabel,
+        reportSummary: data.reportSummary,
+        reportDownloadUrl: data.reportDownloadUrl,
+        fileHashSha256: data.fileHashSha256,
+        generatedAt: data.generatedAt,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Analysis failed.";
+      setAnalysisError(message);
+      setAnalysisResult(null);
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -241,6 +284,44 @@ export function HeroSection() {
           <Upload className="h-4 w-4" />
           Drop Evidence Here
         </label>
+        {isAnalyzing ? (
+          <p className="mt-3 text-xs font-semibold uppercase text-[#f3ebda]/95">
+            Running deterministic multi-agent analysis...
+          </p>
+        ) : null}
+        {analysisError ? (
+          <p className="mt-3 rounded-lg border-2 border-black bg-[#ffdfdf] px-3 py-2 text-xs font-semibold text-[#5b1a1a]">
+            {analysisError}
+          </p>
+        ) : null}
+        {analysisResult ? (
+          <div className="mt-4 rounded-2xl border-4 border-black bg-[#f8f4ea] p-4 text-left shadow-[4px_4px_0_#000]">
+            <p className="text-xs font-bold uppercase text-[#1d2a24]">
+              Analysis #{analysisResult.analysisId}
+            </p>
+            <p className="mt-2 text-2xl font-extrabold text-[#1d2a24]">
+              Trust Score: {analysisResult.finalTrustScore}/100
+            </p>
+            <p className="text-sm font-semibold text-[#2d3f35]">
+              Verdict: {analysisResult.verdictLabel}
+            </p>
+            <p className="mt-2 text-xs font-medium text-[#2d3f35]">
+              {analysisResult.reportSummary}
+            </p>
+            <p className="mt-2 break-all text-[11px] font-mono text-[#33473d]">
+              SHA-256: {analysisResult.fileHashSha256}
+            </p>
+            <p className="mt-1 text-[11px] font-mono text-[#33473d]">
+              Generated: {new Date(analysisResult.generatedAt).toLocaleString()}
+            </p>
+            <a
+              href={analysisResult.reportDownloadUrl}
+              className="mt-3 inline-flex rounded-lg border-2 border-black bg-[#1f2937] px-3 py-2 text-xs font-bold uppercase text-white shadow-[3px_3px_0_#000]"
+            >
+              Download Report
+            </a>
+          </div>
+        ) : null}
       </motion.div>
 
       <div

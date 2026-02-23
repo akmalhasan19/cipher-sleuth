@@ -1,56 +1,56 @@
 # Cipher Sleuth - Functional Feature Progress Checklist (MVP Bertahap)
 
 ## 0) Baseline & Foundation
-- [ ] Lock target branch dan dokumentasikan baseline (`npm run build`, `npm run lint`) sebelum perubahan besar.
-- [ ] Rapikan error lint yang menghambat pipeline (mis. unescaped entities di `app/components/reviews-section.tsx`).
-- [ ] Buat folder struktur modular:
-  - [ ] `app/lib/validation`
-  - [ ] `app/lib/agents`
-  - [ ] `app/lib/scoring`
-  - [ ] `app/lib/report`
-  - [ ] `app/lib/db`
-- [ ] Tambah `zod` untuk validasi schema API input/output.
+- [x] Lock target branch dan dokumentasikan baseline (`npm run build`, `npm run lint`) sebelum perubahan besar.
+- [x] Rapikan error lint yang menghambat pipeline (mis. unescaped entities di `app/components/reviews-section.tsx`).
+- [x] Buat folder struktur modular:
+  - [x] `app/lib/validation`
+  - [x] `app/lib/agents`
+  - [x] `app/lib/scoring`
+  - [x] `app/lib/report`
+  - [x] `app/lib/db`
+- [x] Tambah `zod` untuk validasi schema API input/output.
 
 ## 1) Input & Asset Validation (Feature 1)
-- [ ] Validasi tipe file pada backend (`image/jpeg`, `image/png`, `image/webp`), tetap menerima ekstensi `.jpg/.jpeg/.png/.webp`.
-- [ ] Validasi batas ukuran file maksimal `5MB` di backend.
-- [ ] Hitung hash SHA-256 dari binary file di backend.
-- [ ] Standarisasi nama file internal (`filenameNormalized`) ke `.webp` untuk chain konsistensi pemrosesan.
-- [ ] Return metadata validasi (`mimeType`, `fileSizeBytes`, `fileHashSha256`) di response API.
+- [x] Validasi tipe file pada backend (`image/jpeg`, `image/png`, `image/webp`), tetap menerima ekstensi `.jpg/.jpeg/.png/.webp`.
+- [x] Validasi batas ukuran file maksimal `5MB` di backend.
+- [x] Hitung hash SHA-256 dari binary file di backend.
+- [x] Standarisasi nama file internal (`filenameNormalized`) ke `.webp` untuk chain konsistensi pemrosesan.
+- [x] Return metadata validasi (`mimeType`, `fileSizeBytes`, `fileHashSha256`) di response API.
 - [ ] Tangani error standar:
-  - [ ] `400` file tidak ada/tidak valid.
-  - [ ] `413` file melebihi ukuran.
-  - [ ] `415` MIME tidak didukung.
+  - [x] `400` file tidak ada/tidak valid.
+  - [x] `413` file melebihi ukuran.
+  - [x] `415` MIME tidak didukung.
 
 ## 2) Multi-Agent Engine Deterministic (Feature 2 A/B/C)
-- [ ] Implement `Exif Agent` (extract metadata + software signature) di `app/lib/agents/exif-agent.ts`.
-- [ ] Implement `ELA Agent` (recompress + pixel difference + anomaly summary) di `app/lib/agents/ela-agent.ts`.
-- [ ] Implement `DWT-SVD Agent` (watermark integrity estimator) di `app/lib/agents/dwt-svd-agent.ts`.
-- [ ] Semua agent dijalankan paralel via `Promise.all` dari orchestrator route.
-- [ ] Setiap agent wajib return:
-  - [ ] `status`
-  - [ ] `elapsedMs`
-  - [ ] `confidence`
-  - [ ] `logs[]`
-  - [ ] `rawResult` terstruktur
+- [x] Implement `Exif Agent` (extract metadata + software signature) di `app/lib/agents/exif-agent.ts`.
+- [x] Implement `ELA Agent` (recompress + pixel difference + anomaly summary) di `app/lib/agents/ela-agent.ts`.
+- [x] Implement `DWT-SVD Agent` (watermark integrity estimator) di `app/lib/agents/dwt-svd-agent.ts`.
+- [x] Semua agent dijalankan paralel via `Promise.all` dari orchestrator route.
+- [x] Setiap agent wajib return:
+  - [x] `status`
+  - [x] `elapsedMs`
+  - [x] `confidence`
+  - [x] `logs[]`
+  - [x] `rawResult` terstruktur
 
 ## 3) LLM Orchestrator (Feature 2D)
-- [ ] Implement prompt builder yang menggabungkan output 3 agent deterministic.
-- [ ] Integrasi provider LLM via env var (`OPENAI_API_KEY` + model config).
-- [ ] Tambah fallback heuristic jika API key tidak tersedia atau request LLM gagal.
-- [ ] Orchestrator output wajib berisi:
-  - [ ] `reportText` (narasi manusia)
-  - [ ] `riskSignals[]`
-  - [ ] `recommendedVerdict`
+- [x] Implement prompt builder yang menggabungkan output 3 agent deterministic.
+- [x] Integrasi provider LLM via env var (`OPENAI_API_KEY` + model config).
+- [x] Tambah fallback heuristic jika API key tidak tersedia atau request LLM gagal.
+- [x] Orchestrator output wajib berisi:
+  - [x] `reportText` (narasi manusia)
+  - [x] `riskSignals[]`
+  - [x] `recommendedVerdict`
 
 ## 4) Consensus & Auto Scoring (Feature 3)
-- [ ] Implement algoritma skor 0-100 dengan bobot eksplisit per agent.
-- [ ] Implement klasifikasi final:
-  - [ ] `verified` untuk 90-100
-  - [ ] `suspicious` untuk 50-89
-  - [ ] `manipulated` untuk <50
-- [ ] Simpan breakdown scoring (`TrustScoreBreakdown`) untuk auditability.
-- [ ] Samakan threshold scoring dengan PRD dan expose di config internal.
+- [x] Implement algoritma skor 0-100 dengan bobot eksplisit per agent.
+- [x] Implement klasifikasi final:
+  - [x] `verified` untuk 90-100
+  - [x] `suspicious` untuk 50-89
+  - [x] `manipulated` untuk <50
+- [x] Simpan breakdown scoring (`TrustScoreBreakdown`) untuk auditability.
+- [x] Samakan threshold scoring dengan PRD dan expose di config internal.
 
 ## 5) Forensic Report Generation (Feature 4)
 - [ ] Bentuk `forensic breakdown` terstruktur dari hasil agent + orchestrator.
@@ -83,10 +83,10 @@
 - [ ] Logging error DB tidak boleh membuat API crash tanpa response terstruktur.
 
 ## 7) Frontend Integration (Workspace + Report UX)
-- [ ] Hubungkan upload di `HeroSection` ke API real (`/api/analyze`) bukan hanya local conversion.
+- [x] Hubungkan upload di `HeroSection` ke API real (`/api/analyze`) bukan hanya local conversion.
 - [ ] Tampilkan status per-agent real dari response API.
-- [ ] Tampilkan final trust score + verdict di UI utama.
-- [ ] Tampilkan hash file dan waktu analisis pada hasil.
+- [x] Tampilkan final trust score + verdict di UI utama.
+- [x] Tampilkan hash file dan waktu analisis pada hasil.
 - [ ] Tambah tombol export PDF yang mengarah ke endpoint report.
 - [ ] Jaga kompatibilitas mobile layout (tidak tabrakan antar elemen).
 

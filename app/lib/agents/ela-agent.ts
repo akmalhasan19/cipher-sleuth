@@ -19,7 +19,7 @@ export async function runElaAgent(context: AgentRunContext): Promise<AgentResult
     anomalyScore >= 0.7 ? "high" : anomalyScore >= 0.35 ? "medium" : "low";
 
   const trustDelta =
-    anomalyTier === "high" ? -22 : anomalyTier === "medium" ? -12 : -4;
+    anomalyTier === "high" ? -22 : anomalyTier === "medium" ? -10 : -2;
 
   return {
     agentId: "noise-bot",

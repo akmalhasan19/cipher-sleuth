@@ -7,7 +7,7 @@ const navItems = ["Features", "Case Studies", "API", "Pricing"];
 
 export function TopNavigation() {
   return (
-    <header className="static px-4 pt-4 md:px-8" style={{ position: "static" }}>
+    <header className="sticky top-0 z-50 px-4 pt-4 md:px-8">
       <nav className="mx-auto flex h-14 md:h-16 w-full max-w-6xl items-center justify-between rounded-2xl border-2 border-black bg-[#f8f4ea] px-3 md:px-6 shadow-[0_4px_0_#16382b] md:shadow-[0_8px_0_#16382b]">
         <div className="flex items-center gap-2">
           <Image

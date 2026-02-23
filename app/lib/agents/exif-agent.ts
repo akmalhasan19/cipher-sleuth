@@ -30,7 +30,7 @@ export async function runExifAgent(context: AgentRunContext): Promise<AgentResul
     agentName: "Metadata Investigator (Exif-Bot)",
     status: "completed",
     confidence: hasSuspiciousMetadata ? 0.94 : 0.88,
-    trustDelta: hasSuspiciousMetadata ? -18 : -6,
+    trustDelta: hasSuspiciousMetadata ? -18 : -1,
     elapsedMs: Date.now() - before,
     logs: [
       `Loaded EXIF payload for ${context.filenameOriginal}.`,

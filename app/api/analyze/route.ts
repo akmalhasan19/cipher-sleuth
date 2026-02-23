@@ -5,6 +5,10 @@ import type { AgentResult } from "@/app/lib/agents/types";
 import { saveAnalysisRecord } from "@/app/lib/db/analysis-session-store";
 import { storeEvidenceAssetIfLoggedIn } from "@/app/lib/db/evidence-storage";
 import {
+  findInvestigationByHash,
+  persistInvestigation,
+} from "@/app/lib/db/investigation-ledger";
+import {
   buildDownloadableReportText,
   buildReportSummary,
 } from "@/app/lib/report/build-report";
@@ -14,6 +18,8 @@ import { SCORING_CONFIG } from "@/app/lib/scoring/scoring-config";
 import { computeTrustScore } from "@/app/lib/scoring/trust-score";
 import type { Verdict } from "@/app/lib/scoring/trust-score";
 import {
+  type AccessContext,
+  type ValidatedUpload,
   jsonAnalyzeSchema,
   resolveAccessContext,
   validateAndNormalizeUpload,
@@ -59,6 +65,75 @@ function buildValidationErrorResponse(errorMessage: string) {
   }
 
   return NextResponse.json({ ok: false, error: errorMessage }, { status: 400 });
+}
+
+function applyGuestCookies(response: NextResponse, access: AccessContext): void {
+  if (access.isLoggedIn) {
+    return;
+  }
+
+  const isProduction = process.env.NODE_ENV === "production";
+  response.cookies.set("cipher_sleuth_guest_id", access.guestId, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: isProduction,
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+  });
+  response.cookies.set(
+    "cipher_sleuth_guest_used_count",
+    String(access.guestUsedCount + 1),
+    {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: isProduction,
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+    }
+  );
+}
+
+function buildAccessPayload(access: AccessContext, guestLimit: number) {
+  return {
+    isLoggedIn: access.isLoggedIn,
+    guestFreeAnalysisLimit: guestLimit,
+    guestUsageRemaining: access.isLoggedIn
+      ? null
+      : Math.max(0, guestLimit - (access.guestUsedCount + 1)),
+  };
+}
+
+type ParsedAnalyzeRequest = {
+  uploadedFile: File | null;
+  userIdFromBody?: string;
+};
+
+async function parseAnalyzeRequest(request: Request): Promise<ParsedAnalyzeRequest> {
+  const contentType = request.headers.get("content-type") ?? "";
+
+  let uploadedFile: File | null = null;
+  let userIdFromBody: string | undefined;
+
+  if (contentType.includes("multipart/form-data")) {
+    const formData = await request.formData();
+    const file = formData.get("file");
+    const userId = formData.get("userId");
+
+    if (file instanceof File) {
+      uploadedFile = file;
+    }
+    if (typeof userId === "string") {
+      userIdFromBody = userId;
+    }
+  } else if (contentType.includes("application/json")) {
+    const body = await request.json();
+    const parsed = jsonAnalyzeSchema.safeParse(body);
+    if (parsed.success) {
+      userIdFromBody = parsed.data.userId;
+    }
+  }
+
+  return { uploadedFile, userIdFromBody };
 }
 
 function sampleAgentResults(): AgentResult[] {
@@ -131,6 +206,7 @@ export async function GET() {
     message: "Analyze API is running with optional LLM orchestration and fallback.",
     capabilities: {
       llmEnabled: env.ENABLE_LLM_ORCHESTRATOR === "true",
+      duplicateDetectionEnabled: env.ENABLE_DUPLICATE_DETECTION === "true",
       llmModel: env.OPENAI_MODEL,
       maxUploadMb: env.MAX_UPLOAD_MB,
       guestFreeAnalysisLimit: env.GUEST_FREE_ANALYSIS_LIMIT,
@@ -154,52 +230,144 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const env = getAppEnv();
-    const contentType = request.headers.get("content-type") ?? "";
-
-    let uploadedFile: File | null = null;
-    let userIdFromBody: string | undefined;
-
-    if (contentType.includes("multipart/form-data")) {
-      const formData = await request.formData();
-      const file = formData.get("file");
-      const userId = formData.get("userId");
-
-      if (file instanceof File) {
-        uploadedFile = file;
-      }
-      if (typeof userId === "string") {
-        userIdFromBody = userId;
-      }
-    } else if (contentType.includes("application/json")) {
-      const body = await request.json();
-      const parsed = jsonAnalyzeSchema.safeParse(body);
-      if (parsed.success) {
-        userIdFromBody = parsed.data.userId;
-      }
-    }
+    const parsedRequest = await parseAnalyzeRequest(request);
 
     const access = resolveAccessContext(
       request,
       env.GUEST_FREE_ANALYSIS_LIMIT,
-      userIdFromBody
+      parsedRequest.userIdFromBody
     );
     if (!access.isLoggedIn && access.guestLimitUsed) {
       return buildGuestLimitResponse();
     }
 
-    if (!uploadedFile) {
+    if (!parsedRequest.uploadedFile) {
       return NextResponse.json(
         { ok: false, error: "No image file provided. Submit multipart/form-data with field 'file'." },
         { status: 400 }
       );
     }
 
-    let validatedUpload;
+    let validatedUpload: ValidatedUpload;
     try {
-      validatedUpload = await validateAndNormalizeUpload(uploadedFile, env.MAX_UPLOAD_MB);
+      validatedUpload = await validateAndNormalizeUpload(
+        parsedRequest.uploadedFile,
+        env.MAX_UPLOAD_MB
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid upload payload.";
       return buildValidationErrorResponse(message);
+    }
+
+    const duplicateDetectionEnabled = env.ENABLE_DUPLICATE_DETECTION === "true";
+    let duplicateLookupStatus = "skipped-disabled";
+    let duplicateLookupError: string | null = null;
+
+    if (duplicateDetectionEnabled) {
+      const lookup = await findInvestigationByHash(validatedUpload.fileHashSha256);
+      duplicateLookupStatus = lookup.status;
+      duplicateLookupError = lookup.errorMessage;
+
+      if (lookup.status === "found" && lookup.investigation) {
+        const analysisId = `analysis_${Date.now()}_${randomUUID().slice(0, 8)}`;
+        const generatedAt = lookup.investigation.generatedAt;
+        const verdictLabel = toVerdictLabel(lookup.investigation.verdict);
+        const forensicBreakdown = buildForensicBreakdown({
+          analysisId,
+          generatedAt,
+          filenameOriginal: validatedUpload.filenameOriginal,
+          fileHashSha256: validatedUpload.fileHashSha256,
+          verdict: lookup.investigation.verdict,
+          verdictLabel,
+          finalTrustScore: lookup.investigation.finalTrustScore,
+          trustScoreBreakdown: lookup.investigation.trustScoreBreakdown,
+          agentResults: lookup.investigation.agentResults,
+          orchestrator: lookup.investigation.orchestrator,
+        });
+
+        const storageResult = await storeEvidenceAssetIfLoggedIn({
+          userId: access.userId,
+          file: parsedRequest.uploadedFile,
+          filenameNormalized: validatedUpload.filenameNormalized,
+          fileHashSha256: validatedUpload.fileHashSha256,
+        });
+
+        const downloadableReport = buildDownloadableReportText({
+          analysisId,
+          filenameOriginal: validatedUpload.filenameOriginal,
+          filenameNormalized: validatedUpload.filenameNormalized,
+          fileHashSha256: validatedUpload.fileHashSha256,
+          finalTrustScore: lookup.investigation.finalTrustScore,
+          verdict: lookup.investigation.verdict,
+          trustScoreBreakdown: lookup.investigation.trustScoreBreakdown,
+          generatedAt,
+          agentResults: lookup.investigation.agentResults,
+          isLoggedIn: access.isLoggedIn,
+          orchestrator: lookup.investigation.orchestrator,
+        });
+
+        saveAnalysisRecord({
+          analysisId,
+          ownerUserId: access.userId,
+          ownerGuestId: access.isLoggedIn ? null : access.guestId,
+          filenameOriginal: validatedUpload.filenameOriginal,
+          filenameNormalized: validatedUpload.filenameNormalized,
+          fileHashSha256: validatedUpload.fileHashSha256,
+          finalTrustScore: lookup.investigation.finalTrustScore,
+          verdict: lookup.investigation.verdict,
+          forensicBreakdown,
+          trustScoreBreakdown: lookup.investigation.trustScoreBreakdown,
+          generatedAt,
+          reportText: downloadableReport,
+          agentResults: lookup.investigation.agentResults,
+        });
+
+        const response = NextResponse.json({
+          ok: true,
+          message: "Duplicate hash found. Returned cached investigation record.",
+          analysisId,
+          analysisMode:
+            lookup.investigation.orchestrator.mode === "llm"
+              ? "llm-orchestrated"
+              : "deterministic-no-ai",
+          source: "cache",
+          filenameOriginal: validatedUpload.filenameOriginal,
+          filenameNormalized: validatedUpload.filenameNormalized,
+          mimeType: validatedUpload.mimeType,
+          fileSizeBytes: validatedUpload.fileSizeBytes,
+          fileHashSha256: validatedUpload.fileHashSha256,
+          finalTrustScore: lookup.investigation.finalTrustScore,
+          verdict: lookup.investigation.verdict,
+          verdictLabel,
+          trustScoreBreakdown: lookup.investigation.trustScoreBreakdown,
+          forensicBreakdown,
+          reportSummary: lookup.investigation.orchestrator.reportText,
+          deterministicSummary: lookup.investigation.deterministicSummary,
+          reportText: lookup.investigation.orchestrator.reportText,
+          riskSignals: lookup.investigation.orchestrator.riskSignals,
+          recommendedVerdict: lookup.investigation.orchestrator.recommendedVerdict,
+          orchestrator: lookup.investigation.orchestrator,
+          reportDownloadUrl: `/api/report/${analysisId}/pdf`,
+          generatedAt,
+          agentResults: lookup.investigation.agentResults,
+          storage: storageResult,
+          access: buildAccessPayload(access, env.GUEST_FREE_ANALYSIS_LIMIT),
+          database: {
+            duplicateDetectionEnabled,
+            lookup: {
+              status: duplicateLookupStatus,
+              errorMessage: duplicateLookupError,
+            },
+            persist: {
+              status: "skipped-cache-hit",
+              errorMessage: null,
+            },
+          },
+        });
+
+        applyGuestCookies(response, access);
+        return response;
+      }
     }
 
     const analysisId = `analysis_${Date.now()}_${randomUUID().slice(0, 8)}`;
@@ -246,7 +414,7 @@ export async function POST(request: Request) {
 
     const storageResult = await storeEvidenceAssetIfLoggedIn({
       userId: access.userId,
-      file: uploadedFile,
+      file: parsedRequest.uploadedFile,
       filenameNormalized: validatedUpload.filenameNormalized,
       fileHashSha256: validatedUpload.fileHashSha256,
     });
@@ -281,6 +449,22 @@ export async function POST(request: Request) {
       agentResults,
     });
 
+    const persistResult = await persistInvestigation({
+      fileHashSha256: validatedUpload.fileHashSha256,
+      filenameOriginal: validatedUpload.filenameOriginal,
+      filenameNormalized: validatedUpload.filenameNormalized,
+      mimeType: validatedUpload.mimeType,
+      fileSizeBytes: validatedUpload.fileSizeBytes,
+      finalTrustScore: score.finalTrustScore,
+      verdict: score.verdict,
+      reportText: downloadableReport,
+      generatedAt,
+      agentResults,
+      trustScoreBreakdown: score,
+      orchestrator: orchestration,
+      deterministicSummary,
+    });
+
     const response = NextResponse.json({
       ok: true,
       message: "Deterministic orchestration completed.",
@@ -308,37 +492,21 @@ export async function POST(request: Request) {
       generatedAt,
       agentResults,
       storage: storageResult,
-      access: {
-        isLoggedIn: access.isLoggedIn,
-        guestFreeAnalysisLimit: env.GUEST_FREE_ANALYSIS_LIMIT,
-        guestUsageRemaining: access.isLoggedIn
-          ? null
-          : Math.max(0, env.GUEST_FREE_ANALYSIS_LIMIT - (access.guestUsedCount + 1)),
+      access: buildAccessPayload(access, env.GUEST_FREE_ANALYSIS_LIMIT),
+      database: {
+        duplicateDetectionEnabled,
+        lookup: {
+          status: duplicateLookupStatus,
+          errorMessage: duplicateLookupError,
+        },
+        persist: {
+          status: persistResult.status,
+          errorMessage: persistResult.errorMessage,
+        },
       },
     });
 
-    if (!access.isLoggedIn) {
-      const isProduction = process.env.NODE_ENV === "production";
-      response.cookies.set("cipher_sleuth_guest_id", access.guestId, {
-        httpOnly: true,
-        sameSite: "lax",
-        secure: isProduction,
-        path: "/",
-        maxAge: 60 * 60 * 24 * 365,
-      });
-      response.cookies.set(
-        "cipher_sleuth_guest_used_count",
-        String(access.guestUsedCount + 1),
-        {
-          httpOnly: true,
-          sameSite: "lax",
-          secure: isProduction,
-          path: "/",
-          maxAge: 60 * 60 * 24 * 365,
-        }
-      );
-    }
-
+    applyGuestCookies(response, access);
     return response;
   } catch (error) {
     const message =

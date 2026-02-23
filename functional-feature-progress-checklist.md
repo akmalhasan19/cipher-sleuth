@@ -64,50 +64,50 @@
 - [x] Pastikan PDF read-only dan konsisten dengan record database.
 
 ## 6) Database Logging & Duplicate Detection (Feature 5)
-- [ ] Integrasi Supabase (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`).
-- [ ] Buat tabel `investigations` dengan kolom:
-  - [ ] `id`
-  - [ ] `file_hash_sha256` (unique)
-  - [ ] `filename_original`
-  - [ ] `filename_normalized`
-  - [ ] `mime_type`
-  - [ ] `file_size_bytes`
-  - [ ] `final_trust_score`
-  - [ ] `verdict`
-  - [ ] `report_text`
-  - [ ] `agent_results_json`
-  - [ ] `created_at`
-- [ ] Sebelum analisis, cek duplikasi berdasarkan hash:
-  - [ ] jika ada, return `source: "cache"`
-  - [ ] jika tidak ada, jalankan komputasi lalu simpan dan return `source: "computed"`
-- [ ] Logging error DB tidak boleh membuat API crash tanpa response terstruktur.
+- [x] Integrasi Supabase (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`).
+- [x] Buat tabel `investigations` dengan kolom:
+  - [x] `id`
+  - [x] `file_hash_sha256` (unique)
+  - [x] `filename_original`
+  - [x] `filename_normalized`
+  - [x] `mime_type`
+  - [x] `file_size_bytes`
+  - [x] `final_trust_score`
+  - [x] `verdict`
+  - [x] `report_text`
+  - [x] `agent_results_json`
+  - [x] `created_at`
+- [x] Sebelum analisis, cek duplikasi berdasarkan hash:
+  - [x] jika ada, return `source: "cache"`
+  - [x] jika tidak ada, jalankan komputasi lalu simpan dan return `source: "computed"`
+- [x] Logging error DB tidak boleh membuat API crash tanpa response terstruktur.
 
 ## 7) Frontend Integration (Workspace + Report UX)
 - [x] Hubungkan upload di `HeroSection` ke API real (`/api/analyze`) bukan hanya local conversion.
-- [ ] Tampilkan status per-agent real dari response API.
+- [x] Tampilkan status per-agent real dari response API.
 - [x] Tampilkan final trust score + verdict di UI utama.
 - [x] Tampilkan hash file dan waktu analisis pada hasil.
-- [ ] Tambah tombol export PDF yang mengarah ke endpoint report.
-- [ ] Jaga kompatibilitas mobile layout (tidak tabrakan antar elemen).
+- [x] Tambah tombol export PDF yang mengarah ke endpoint report.
+- [x] Jaga kompatibilitas mobile layout (tidak tabrakan antar elemen).
 
 ## 8) Test Cases & Acceptance Scenarios
-- [ ] Unit test validasi file (MIME, size, missing file).
-- [ ] Unit test trust score banding (`verified/suspicious/manipulated`).
-- [ ] Integration test `POST /api/analyze` untuk file valid PNG/JPG.
-- [ ] Integration test duplicate upload: request kedua harus `source: "cache"`.
-- [ ] Integration test `GET /api/report/[analysisId]/pdf` return `application/pdf`.
-- [ ] Manual scenario:
-  - [ ] 1 gambar asli -> skor tinggi (`>=90`)
-  - [ ] 1 gambar manipulasi -> skor rendah (`<50`)
+- [x] Unit test validasi file (MIME, size, missing file).
+- [x] Unit test trust score banding (`verified/suspicious/manipulated`).
+- [x] Integration test `POST /api/analyze` untuk file valid PNG/JPG.
+- [x] Integration test duplicate upload: request kedua harus `source: "cache"`.
+- [x] Integration test `GET /api/report/[analysisId]/pdf` return `application/pdf`.
+- [x] Manual scenario:
+  - [x] 1 gambar asli -> skor tinggi (`>=90`)
+  - [x] 1 gambar manipulasi -> skor rendah (`<50`)
 - [ ] Performance sanity:
-  - [ ] payload `<=5MB` diproses tanpa timeout
+  - [x] payload `<=5MB` diproses tanpa timeout
   - [ ] UI tetap responsif saat animasi berjalan
 
 ## 9) Definition of Done
-- [ ] Semua endpoint utama return payload sesuai kontrak.
+- [x] Semua endpoint utama return payload sesuai kontrak.
 - [ ] Semua checklist test lulus.
-- [ ] Minimal 2 sampel uji (asli vs manipulasi) terdokumentasi.
-- [ ] Dokumentasi env vars dan setup Supabase selesai.
+- [x] Minimal 2 sampel uji (asli vs manipulasi) terdokumentasi.
+- [x] Dokumentasi env vars dan setup Supabase selesai.
 - [ ] Build produksi berhasil (`npm run build`) tanpa regression UI mayor.
 
 ## Asumsi & Default

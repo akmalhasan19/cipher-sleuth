@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, useInView } from "framer-motion";
 import { Upload } from "lucide-react";
 import { ensureWebpFile } from "../lib/ensure-webp-file";
@@ -14,6 +14,8 @@ const stripItems = [
   "Integrity Layer",
 ];
 
+const GLITCH_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
 type AnalysisResult = {
   analysisId: string;
   finalTrustScore: number;
@@ -22,6 +24,12 @@ type AnalysisResult = {
   reportDownloadUrl: string;
   fileHashSha256: string;
   generatedAt: string;
+  agentResults: {
+    agentName: string;
+    status: string;
+    confidence: number;
+    elapsedMs: number;
+  }[];
 };
 
 function TypewriterLine({ text, delay = 0, speed = 50, className = "", start = false, loopDelay = 10000 }: { text: string, delay?: number, speed?: number, className?: string, start?: boolean, loopDelay?: number }) {
@@ -67,17 +75,23 @@ function TypewriterLine({ text, delay = 0, speed = 50, className = "", start = f
 function GlitchText({ text }: { text: string }) {
   const [displayText, setDisplayText] = useState(text);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  // Hanya menggunakan huruf kapital dan huruf kecil
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  const initialGlitchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const startGlitch = () => {
+  const startGlitch = useCallback(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = setInterval(() => {
-      setDisplayText(text.split("").map(() => chars[Math.floor(Math.random() * chars.length)]).join(""));
+      setDisplayText(
+        text
+          .split("")
+          .map(
+            () => GLITCH_CHARS[Math.floor(Math.random() * GLITCH_CHARS.length)]
+          )
+          .join("")
+      );
     }, 50);
-  };
+  }, [text]);
 
-  const stopGlitch = () => {
+  const stopGlitch = useCallback(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     let iteration = 0;
     
@@ -85,7 +99,7 @@ function GlitchText({ text }: { text: string }) {
       setDisplayText(() => 
         text.split("").map((_, index) => {
           if (index < iteration) return text[index];
-          return chars[Math.floor(Math.random() * chars.length)];
+          return GLITCH_CHARS[Math.floor(Math.random() * GLITCH_CHARS.length)];
         }).join("")
       );
       
@@ -96,13 +110,22 @@ function GlitchText({ text }: { text: string }) {
       
       iteration += 1 / 3;
     }, 30);
-  };
+  }, [text]);
 
   useEffect(() => {
+    // Trigger a short glitch burst on first render, then resolve back to original text.
+    startGlitch();
+    initialGlitchTimeoutRef.current = setTimeout(() => {
+      stopGlitch();
+    }, 220);
+
     return () => {
+      if (initialGlitchTimeoutRef.current) {
+        clearTimeout(initialGlitchTimeoutRef.current);
+      }
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, []);
+  }, [startGlitch, stopGlitch]);
 
   return (
     <span 
@@ -198,6 +221,7 @@ export function HeroSection() {
         reportDownloadUrl: data.reportDownloadUrl,
         fileHashSha256: data.fileHashSha256,
         generatedAt: data.generatedAt,
+        agentResults: data.agentResults,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Analysis failed.";
@@ -207,6 +231,21 @@ export function HeroSection() {
       setIsAnalyzing(false);
     }
   };
+
+  useEffect(() => {
+    const handleGlobalDrop = (event: DragEvent) => {
+      event.preventDefault();
+      const droppedFile = event.dataTransfer?.files?.[0];
+      if (droppedFile && droppedFile.type.startsWith("image/")) {
+        void handleIncomingFile(droppedFile);
+      }
+    };
+
+    window.addEventListener("drop", handleGlobalDrop);
+    return () => {
+      window.removeEventListener("drop", handleGlobalDrop);
+    };
+  }, []);
 
   return (
     <section className="space-y-6 py-4">
@@ -314,11 +353,34 @@ export function HeroSection() {
             <p className="mt-1 text-[11px] font-mono text-[#33473d]">
               Generated: {new Date(analysisResult.generatedAt).toLocaleString()}
             </p>
+
+            {analysisResult.agentResults && analysisResult.agentResults.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <p className="text-xs font-bold uppercase text-[#1d2a24]">Agent Status</p>
+                {analysisResult.agentResults.map((agent, idx) => (
+                  <div key={idx} className="flex items-center justify-between rounded-lg border-2 border-black bg-white px-3 py-2 text-xs shadow-[2px_2px_0_#000]">
+                    <span className="font-bold text-[#1d2a24]">{agent.agentName}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-[#33473d]">{agent.elapsedMs}ms</span>
+                      <span className={`font-bold uppercase ${agent.status === 'completed' ? 'text-green-700' : 'text-red-700'}`}>
+                        {agent.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <a
               href={analysisResult.reportDownloadUrl}
-              className="mt-3 inline-flex rounded-lg border-2 border-black bg-[#1f2937] px-3 py-2 text-xs font-bold uppercase text-white shadow-[3px_3px_0_#000]"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 inline-flex items-center gap-2 rounded-lg border-2 border-black bg-[#1f2937] px-4 py-2 text-xs font-bold uppercase text-white shadow-[3px_3px_0_#000] transition hover:translate-y-[1px] hover:shadow-[2px_2px_0_#000]"
             >
-              Download Report
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Export PDF Report
             </a>
           </div>
         ) : null}

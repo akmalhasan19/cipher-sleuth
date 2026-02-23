@@ -18,7 +18,7 @@ export async function runDwtSvdAgent(
 
   const watermarkIntegrity = deriveIntegrity(context.fileHashSha256);
   const trustDelta =
-    watermarkIntegrity < 75 ? -20 : watermarkIntegrity < 90 ? -9 : -3;
+    watermarkIntegrity < 75 ? -20 : watermarkIntegrity < 90 ? -8 : -1;
 
   return {
     agentId: "dwt-svd-bot",

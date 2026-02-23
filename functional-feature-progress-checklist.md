@@ -53,15 +53,15 @@
 - [x] Samakan threshold scoring dengan PRD dan expose di config internal.
 
 ## 5) Forensic Report Generation (Feature 4)
-- [ ] Bentuk `forensic breakdown` terstruktur dari hasil agent + orchestrator.
-- [ ] Implement endpoint `GET /api/report/[analysisId]/pdf`.
-- [ ] PDF memuat minimal:
-  - [ ] hash file
-  - [ ] final trust score
-  - [ ] verdict
-  - [ ] ringkasan agent
-  - [ ] timestamp analisis
-- [ ] Pastikan PDF read-only dan konsisten dengan record database.
+- [x] Bentuk `forensic breakdown` terstruktur dari hasil agent + orchestrator.
+- [x] Implement endpoint `GET /api/report/[analysisId]/pdf`.
+- [x] PDF memuat minimal:
+  - [x] hash file
+  - [x] final trust score
+  - [x] verdict
+  - [x] ringkasan agent
+  - [x] timestamp analisis
+- [x] Pastikan PDF read-only dan konsisten dengan record database.
 
 ## 6) Database Logging & Duplicate Detection (Feature 5)
 - [ ] Integrasi Supabase (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`).

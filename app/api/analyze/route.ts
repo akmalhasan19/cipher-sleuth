@@ -8,6 +8,7 @@ import {
   buildDownloadableReportText,
   buildReportSummary,
 } from "@/app/lib/report/build-report";
+import { buildForensicBreakdown } from "@/app/lib/report/forensic-breakdown";
 import { runOrchestratorSynthesis } from "@/app/lib/report/llm-orchestrator";
 import { SCORING_CONFIG } from "@/app/lib/scoring/scoring-config";
 import { computeTrustScore } from "@/app/lib/scoring/trust-score";
@@ -99,6 +100,7 @@ export async function GET() {
   const env = getAppEnv();
   const agentResults = sampleAgentResults();
   const score = computeTrustScore(agentResults);
+  const verdictLabel = toVerdictLabel(score.verdict);
   const orchestration = await runOrchestratorSynthesis(
     {
       analysisId: "sample-analysis",
@@ -106,11 +108,23 @@ export async function GET() {
       fileHashSha256: "sample-hash",
       finalTrustScore: score.finalTrustScore,
       verdict: score.verdict,
-      verdictLabel: toVerdictLabel(score.verdict),
+      verdictLabel,
       agentResults,
     },
     env
   );
+  const forensicBreakdown = buildForensicBreakdown({
+    analysisId: "sample-analysis",
+    generatedAt: new Date().toISOString(),
+    filenameOriginal: "sample-evidence.jpg",
+    fileHashSha256: "sample-hash",
+    verdict: score.verdict,
+    verdictLabel,
+    finalTrustScore: score.finalTrustScore,
+    trustScoreBreakdown: score,
+    agentResults,
+    orchestrator: orchestration,
+  });
 
   return NextResponse.json({
     ok: true,
@@ -127,8 +141,9 @@ export async function GET() {
         orchestration.mode === "llm" ? "llm-orchestrated" : "deterministic-no-ai",
       finalTrustScore: score.finalTrustScore,
       verdict: score.verdict,
-      verdictLabel: toVerdictLabel(score.verdict),
+      verdictLabel,
       trustScoreBreakdown: score,
+      forensicBreakdown,
       reportText: orchestration.reportText,
       riskSignals: orchestration.riskSignals,
       recommendedVerdict: orchestration.recommendedVerdict,
@@ -198,6 +213,7 @@ export async function POST(request: Request) {
       fileHashSha256: validatedUpload.fileHashSha256,
     });
     const score = computeTrustScore(agentResults);
+    const verdictLabel = toVerdictLabel(score.verdict);
     const deterministicSummary = buildReportSummary(
       score.verdict,
       score.finalTrustScore,
@@ -210,11 +226,23 @@ export async function POST(request: Request) {
         fileHashSha256: validatedUpload.fileHashSha256,
         finalTrustScore: score.finalTrustScore,
         verdict: score.verdict,
-        verdictLabel: toVerdictLabel(score.verdict),
+        verdictLabel,
         agentResults,
       },
       env
     );
+    const forensicBreakdown = buildForensicBreakdown({
+      analysisId,
+      generatedAt,
+      filenameOriginal: validatedUpload.filenameOriginal,
+      fileHashSha256: validatedUpload.fileHashSha256,
+      verdict: score.verdict,
+      verdictLabel,
+      finalTrustScore: score.finalTrustScore,
+      trustScoreBreakdown: score,
+      agentResults,
+      orchestrator: orchestration,
+    });
 
     const storageResult = await storeEvidenceAssetIfLoggedIn({
       userId: access.userId,
@@ -246,6 +274,7 @@ export async function POST(request: Request) {
       fileHashSha256: validatedUpload.fileHashSha256,
       finalTrustScore: score.finalTrustScore,
       verdict: score.verdict,
+      forensicBreakdown,
       trustScoreBreakdown: score,
       generatedAt,
       reportText: downloadableReport,
@@ -266,15 +295,16 @@ export async function POST(request: Request) {
       fileHashSha256: validatedUpload.fileHashSha256,
       finalTrustScore: score.finalTrustScore,
       verdict: score.verdict,
-      verdictLabel: toVerdictLabel(score.verdict),
+      verdictLabel,
       trustScoreBreakdown: score,
+      forensicBreakdown,
       reportSummary: orchestration.reportText,
       deterministicSummary,
       reportText: orchestration.reportText,
       riskSignals: orchestration.riskSignals,
       recommendedVerdict: orchestration.recommendedVerdict,
       orchestrator: orchestration,
-      reportDownloadUrl: `/api/report/${analysisId}`,
+      reportDownloadUrl: `/api/report/${analysisId}/pdf`,
       generatedAt,
       agentResults,
       storage: storageResult,

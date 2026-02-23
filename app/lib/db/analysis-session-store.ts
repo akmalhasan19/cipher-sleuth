@@ -1,5 +1,6 @@
 import type { AgentResult } from "../agents/types";
 import type { TrustScoreBreakdown, Verdict } from "../scoring/trust-score";
+import type { ForensicBreakdown } from "../report/forensic-breakdown";
 
 export type StoredAnalysisRecord = {
   analysisId: string;
@@ -11,6 +12,7 @@ export type StoredAnalysisRecord = {
   finalTrustScore: number;
   verdict: Verdict;
   trustScoreBreakdown: TrustScoreBreakdown;
+  forensicBreakdown: ForensicBreakdown;
   generatedAt: string;
   reportText: string;
   agentResults: AgentResult[];

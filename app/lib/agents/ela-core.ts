@@ -4,6 +4,7 @@ import type { AnalysisInput } from "./types";
 
 const MAX_ELA_ANALYZED_PIXELS = 220_000;
 const RECOMPRESS_QUALITY = 90;
+const MAX_ELA_PREVIEW_DIMENSION = 320;
 
 type DecodedImage = {
   width: number;
@@ -26,10 +27,182 @@ export type ElaCoreAnalysis = {
   largestHotspotRatio: number;
   highlightedRegions: number;
   anomalyScore: number;
+  previewWidth: number;
+  previewHeight: number;
+  originalPreviewDataUrl: string | null;
+  residualPreviewDataUrl: string | null;
 };
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function fitInsideMaxDimension(
+  width: number,
+  height: number,
+  maxDimension: number
+): { width: number; height: number } {
+  if (width <= 0 || height <= 0) {
+    return { width: 0, height: 0 };
+  }
+
+  const scale = Math.min(1, maxDimension / Math.max(width, height));
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+}
+
+function resizeRgbaNearest(
+  source: Uint8Array,
+  sourceWidth: number,
+  sourceHeight: number,
+  targetWidth: number,
+  targetHeight: number
+): Uint8Array {
+  const output = new Uint8Array(targetWidth * targetHeight * 4);
+
+  for (let y = 0; y < targetHeight; y += 1) {
+    const sourceY = Math.min(
+      sourceHeight - 1,
+      Math.floor((y / targetHeight) * sourceHeight)
+    );
+
+    for (let x = 0; x < targetWidth; x += 1) {
+      const sourceX = Math.min(
+        sourceWidth - 1,
+        Math.floor((x / targetWidth) * sourceWidth)
+      );
+
+      const sourceIndex = (sourceY * sourceWidth + sourceX) * 4;
+      const targetIndex = (y * targetWidth + x) * 4;
+
+      output[targetIndex] = source[sourceIndex];
+      output[targetIndex + 1] = source[sourceIndex + 1];
+      output[targetIndex + 2] = source[sourceIndex + 2];
+      output[targetIndex + 3] = 255;
+    }
+  }
+
+  return output;
+}
+
+function encodePngDataUrl(
+  rgba: Uint8Array,
+  width: number,
+  height: number
+): string | null {
+  if (width <= 0 || height <= 0 || rgba.length !== width * height * 4) {
+    return null;
+  }
+
+  try {
+    const png = new PNG({
+      width,
+      height,
+      inputHasAlpha: true,
+      colorType: 6,
+    });
+    png.data = Buffer.from(rgba);
+    const pngBuffer = PNG.sync.write(png, { colorType: 6 });
+    return `data:image/png;base64,${pngBuffer.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+
+function mapResidualToHeatColor(normalized: number): [number, number, number] {
+  const t = clamp(normalized, 0, 1);
+
+  if (t < 0.35) {
+    const local = t / 0.35;
+    const r = Math.round(20 + local * (70 - 20));
+    const g = Math.round(32 + local * (145 - 32));
+    const b = Math.round(82 + local * (225 - 82));
+    return [r, g, b];
+  }
+
+  if (t < 0.7) {
+    const local = (t - 0.35) / 0.35;
+    const r = Math.round(70 + local * (248 - 70));
+    const g = Math.round(145 + local * (205 - 145));
+    const b = Math.round(225 + local * (80 - 225));
+    return [r, g, b];
+  }
+
+  const local = (t - 0.7) / 0.3;
+  const r = Math.round(248 + local * (220 - 248));
+  const g = Math.round(205 + local * (64 - 205));
+  const b = Math.round(80 + local * (48 - 80));
+  return [r, g, b];
+}
+
+function buildOriginalPreview(
+  original: DecodedImage
+): { previewWidth: number; previewHeight: number; dataUrl: string | null } {
+  const { width: previewWidth, height: previewHeight } = fitInsideMaxDimension(
+    original.width,
+    original.height,
+    MAX_ELA_PREVIEW_DIMENSION
+  );
+
+  if (previewWidth === 0 || previewHeight === 0) {
+    return { previewWidth: 0, previewHeight: 0, dataUrl: null };
+  }
+
+  const previewRgba = resizeRgbaNearest(
+    original.rgba,
+    original.width,
+    original.height,
+    previewWidth,
+    previewHeight
+  );
+
+  return {
+    previewWidth,
+    previewHeight,
+    dataUrl: encodePngDataUrl(previewRgba, previewWidth, previewHeight),
+  };
+}
+
+function buildResidualPreview(
+  residualValues: number[],
+  sampleWidth: number,
+  sampleHeight: number,
+  p95Residual: number,
+  targetWidth: number,
+  targetHeight: number
+): string | null {
+  if (
+    sampleWidth <= 0 ||
+    sampleHeight <= 0 ||
+    residualValues.length !== sampleWidth * sampleHeight
+  ) {
+    return null;
+  }
+
+  const sourceRgba = new Uint8Array(sampleWidth * sampleHeight * 4);
+  const reference = Math.max(2, p95Residual, 0.001);
+
+  for (let i = 0; i < residualValues.length; i += 1) {
+    const normalized = clamp(residualValues[i] / reference, 0, 1);
+    const [r, g, b] = mapResidualToHeatColor(normalized);
+    const offset = i * 4;
+    sourceRgba[offset] = r;
+    sourceRgba[offset + 1] = g;
+    sourceRgba[offset + 2] = b;
+    sourceRgba[offset + 3] = 255;
+  }
+
+  const previewRgba = resizeRgbaNearest(
+    sourceRgba,
+    sampleWidth,
+    sampleHeight,
+    targetWidth,
+    targetHeight
+  );
+
+  return encodePngDataUrl(previewRgba, targetWidth, targetHeight);
 }
 
 function isPngSignature(bytes: Uint8Array): boolean {
@@ -202,8 +375,14 @@ export function analyzeTrueEla(
       largestHotspotRatio: 0,
       highlightedRegions: 0,
       anomalyScore: 0,
+      previewWidth: 0,
+      previewHeight: 0,
+      originalPreviewDataUrl: null,
+      residualPreviewDataUrl: null,
     };
   }
+
+  const originalPreview = buildOriginalPreview(original);
 
   const recompressed = recompressToJpeg(original, RECOMPRESS_QUALITY);
   if (!recompressed) {
@@ -222,6 +401,10 @@ export function analyzeTrueEla(
       largestHotspotRatio: 0,
       highlightedRegions: 0,
       anomalyScore: 0,
+      previewWidth: originalPreview.previewWidth,
+      previewHeight: originalPreview.previewHeight,
+      originalPreviewDataUrl: originalPreview.dataUrl,
+      residualPreviewDataUrl: null,
     };
   }
 
@@ -249,6 +432,10 @@ export function analyzeTrueEla(
       largestHotspotRatio: 0,
       highlightedRegions: 0,
       anomalyScore: 0,
+      previewWidth: originalPreview.previewWidth,
+      previewHeight: originalPreview.previewHeight,
+      originalPreviewDataUrl: originalPreview.dataUrl,
+      residualPreviewDataUrl: null,
     };
   }
 
@@ -347,6 +534,15 @@ export function analyzeTrueEla(
     ).toFixed(3)
   );
 
+  const residualPreviewDataUrl = buildResidualPreview(
+    residualValues,
+    sampleWidth,
+    sampleHeight,
+    p95Residual,
+    originalPreview.previewWidth,
+    originalPreview.previewHeight
+  );
+
   return {
     mode: "computed",
     recompressQuality: RECOMPRESS_QUALITY,
@@ -362,5 +558,9 @@ export function analyzeTrueEla(
     largestHotspotRatio: Number(hotspotStats.largestHotspotRatio.toFixed(4)),
     highlightedRegions: hotspotStats.highlightedRegions,
     anomalyScore,
+    previewWidth: originalPreview.previewWidth,
+    previewHeight: originalPreview.previewHeight,
+    originalPreviewDataUrl: originalPreview.dataUrl,
+    residualPreviewDataUrl,
   };
 }

@@ -24,6 +24,10 @@ type ElaHeuristic = {
   sampleCount: number;
   imageWidth: number;
   imageHeight: number;
+  previewWidth: number;
+  previewHeight: number;
+  originalPreviewDataUrl: string | null;
+  residualPreviewDataUrl: string | null;
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -103,6 +107,10 @@ function deriveElaHeuristic(context: AgentRunContext): ElaHeuristic {
     sampleCount: ela.sampleCount,
     imageWidth: ela.width,
     imageHeight: ela.height,
+    previewWidth: ela.previewWidth,
+    previewHeight: ela.previewHeight,
+    originalPreviewDataUrl: ela.originalPreviewDataUrl,
+    residualPreviewDataUrl: ela.residualPreviewDataUrl,
   };
 }
 
@@ -133,6 +141,10 @@ export async function runElaAgent(context: AgentRunContext): Promise<AgentResult
       recompressQuality: heuristic.recompressQuality,
       imageWidth: heuristic.imageWidth,
       imageHeight: heuristic.imageHeight,
+      previewWidth: heuristic.previewWidth,
+      previewHeight: heuristic.previewHeight,
+      originalPreviewDataUrl: heuristic.originalPreviewDataUrl,
+      residualPreviewDataUrl: heuristic.residualPreviewDataUrl,
       sampleStep: heuristic.sampleStep,
       sampleCount: heuristic.sampleCount,
       meanResidual: heuristic.meanResidual,

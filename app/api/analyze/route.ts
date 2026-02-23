@@ -269,6 +269,41 @@ function sampleAgentResults(): AgentResult[] {
   ];
 }
 
+type ElaVisualPayload = {
+  available: boolean;
+  previewWidth: number | null;
+  previewHeight: number | null;
+  originalPreviewDataUrl: string | null;
+  residualPreviewDataUrl: string | null;
+};
+
+function extractElaVisualPayload(agentResults: AgentResult[]): ElaVisualPayload | null {
+  const noiseAgent = agentResults.find((agent) => agent.agentId === "noise-bot");
+  if (!noiseAgent) {
+    return null;
+  }
+
+  const previewWidthRaw = noiseAgent.rawResult.previewWidth;
+  const previewHeightRaw = noiseAgent.rawResult.previewHeight;
+  const originalPreviewRaw = noiseAgent.rawResult.originalPreviewDataUrl;
+  const residualPreviewRaw = noiseAgent.rawResult.residualPreviewDataUrl;
+
+  const previewWidth = typeof previewWidthRaw === "number" ? previewWidthRaw : null;
+  const previewHeight = typeof previewHeightRaw === "number" ? previewHeightRaw : null;
+  const originalPreviewDataUrl =
+    typeof originalPreviewRaw === "string" ? originalPreviewRaw : null;
+  const residualPreviewDataUrl =
+    typeof residualPreviewRaw === "string" ? residualPreviewRaw : null;
+
+  return {
+    available: Boolean(originalPreviewDataUrl && residualPreviewDataUrl),
+    previewWidth,
+    previewHeight,
+    originalPreviewDataUrl,
+    residualPreviewDataUrl,
+  };
+}
+
 export async function GET() {
   const env = getAppEnv();
   const agentResults = sampleAgentResults();
@@ -326,6 +361,7 @@ export async function GET() {
       reportText: orchestration.reportText,
       riskSignals: orchestration.riskSignals,
       recommendedVerdict: orchestration.recommendedVerdict,
+      elaVisual: extractElaVisualPayload(agentResults),
     },
   });
 }
@@ -521,6 +557,7 @@ export async function POST(request: Request) {
           reportDownloadUrl: `/api/report/${analysisId}/pdf`,
           generatedAt,
           agentResults: lookup.investigation.agentResults,
+          elaVisual: extractElaVisualPayload(lookup.investigation.agentResults),
           storage: storageResult,
           access: buildAccessPayload(access, env.GUEST_FREE_ANALYSIS_LIMIT),
           database: {
@@ -667,6 +704,7 @@ export async function POST(request: Request) {
       reportDownloadUrl: `/api/report/${analysisId}/pdf`,
       generatedAt,
       agentResults,
+      elaVisual: extractElaVisualPayload(agentResults),
       storage: storageResult,
       access: buildAccessPayload(access, env.GUEST_FREE_ANALYSIS_LIMIT),
       database: {

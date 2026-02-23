@@ -44,6 +44,13 @@ type AnalysisResult = {
   reportDownloadUrl: string;
   fileHashSha256: string;
   generatedAt: string;
+  elaVisual?: {
+    available: boolean;
+    previewWidth: number | null;
+    previewHeight: number | null;
+    originalPreviewDataUrl: string | null;
+    residualPreviewDataUrl: string | null;
+  } | null;
   agentResults: {
     agentName: string;
     status: string;
@@ -355,6 +362,7 @@ export function HeroSection() {
         reportDownloadUrl: data.reportDownloadUrl,
         fileHashSha256: data.fileHashSha256,
         generatedAt: data.generatedAt,
+        elaVisual: data.elaVisual ?? null,
         agentResults: data.agentResults,
       });
     } catch (error) {
@@ -387,7 +395,7 @@ export function HeroSection() {
   }, [handleIncomingFile]);
 
   return (
-    <section className="space-y-6 py-4">
+    <section className="space-y-0 py-0">
       {TURNSTILE_SITE_KEY ? (
         <Script
           id="turnstile-api"
@@ -507,6 +515,37 @@ export function HeroSection() {
             <p className="mt-1 text-[11px] font-mono text-[#33473d]">
               Generated: {new Date(analysisResult.generatedAt).toLocaleString()}
             </p>
+            {analysisResult.elaVisual?.available &&
+            analysisResult.elaVisual.originalPreviewDataUrl &&
+            analysisResult.elaVisual.residualPreviewDataUrl ? (
+              <div className="mt-4 rounded-xl border-2 border-black bg-[#f2ead7] p-3">
+                <p className="text-[11px] font-bold uppercase text-[#1d2a24]">
+                  ELA Visual Evidence
+                </p>
+                <div className="mt-2 grid gap-3 md:grid-cols-2">
+                  <div>
+                    <p className="mb-1 text-[10px] font-semibold uppercase text-[#33473d]">
+                      Original
+                    </p>
+                    <img
+                      src={analysisResult.elaVisual.originalPreviewDataUrl}
+                      alt="Original preview for ELA comparison"
+                      className="w-full rounded-lg border border-black/40 bg-white object-contain"
+                    />
+                  </div>
+                  <div>
+                    <p className="mb-1 text-[10px] font-semibold uppercase text-[#33473d]">
+                      ELA Heatmap
+                    </p>
+                    <img
+                      src={analysisResult.elaVisual.residualPreviewDataUrl}
+                      alt="ELA residual heatmap preview"
+                      className="w-full rounded-lg border border-black/40 bg-white object-contain"
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <a
               href={analysisResult.reportDownloadUrl}

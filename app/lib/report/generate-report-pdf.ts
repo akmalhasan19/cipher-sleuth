@@ -147,6 +147,75 @@ function verdictColor(verdict: StoredAnalysisRecord["verdict"]): ReturnType<type
   return THEME.manipulated;
 }
 
+type ElaVisualPreview = {
+  previewWidth: number;
+  previewHeight: number;
+  originalPreviewDataUrl: string;
+  residualPreviewDataUrl: string;
+};
+
+function extractElaVisualPreview(record: StoredAnalysisRecord): ElaVisualPreview | null {
+  const noiseAgent = record.agentResults.find((agent) => agent.agentId === "noise-bot");
+  if (!noiseAgent) {
+    return null;
+  }
+
+  const previewWidthRaw = noiseAgent.rawResult.previewWidth;
+  const previewHeightRaw = noiseAgent.rawResult.previewHeight;
+  const originalPreviewRaw = noiseAgent.rawResult.originalPreviewDataUrl;
+  const residualPreviewRaw = noiseAgent.rawResult.residualPreviewDataUrl;
+
+  if (
+    typeof previewWidthRaw !== "number" ||
+    typeof previewHeightRaw !== "number" ||
+    typeof originalPreviewRaw !== "string" ||
+    typeof residualPreviewRaw !== "string"
+  ) {
+    return null;
+  }
+
+  if (previewWidthRaw <= 0 || previewHeightRaw <= 0) {
+    return null;
+  }
+
+  return {
+    previewWidth: previewWidthRaw,
+    previewHeight: previewHeightRaw,
+    originalPreviewDataUrl: originalPreviewRaw,
+    residualPreviewDataUrl: residualPreviewRaw,
+  };
+}
+
+function decodePngDataUrl(dataUrl: string): Uint8Array | null {
+  const match = /^data:image\/png;base64,(.+)$/i.exec(dataUrl.trim());
+  if (!match?.[1]) {
+    return null;
+  }
+
+  try {
+    return new Uint8Array(Buffer.from(match[1], "base64"));
+  } catch {
+    return null;
+  }
+}
+
+function fitImageInBox(
+  sourceWidth: number,
+  sourceHeight: number,
+  maxWidth: number,
+  maxHeight: number
+): { width: number; height: number } {
+  if (sourceWidth <= 0 || sourceHeight <= 0) {
+    return { width: 0, height: 0 };
+  }
+
+  const scale = Math.min(maxWidth / sourceWidth, maxHeight / sourceHeight, 1);
+  return {
+    width: Math.max(1, Math.round(sourceWidth * scale)),
+    height: Math.max(1, Math.round(sourceHeight * scale)),
+  };
+}
+
 export async function generateForensicReportPdf(
   record: StoredAnalysisRecord
 ): Promise<Buffer> {
@@ -816,6 +885,150 @@ export async function generateForensicReportPdf(
     cursorY -= cardHeight + 12;
   }
 
+  async function drawElaVisualComparison(): Promise<void> {
+    const preview = extractElaVisualPreview(record);
+    if (!preview) {
+      drawParagraphCard(
+        "ELA Visual Comparison",
+        "ELA preview was not available for this analysis record.",
+        { fillColor: THEME.cardBgAlt, textColor: THEME.muted }
+      );
+      return;
+    }
+
+    const originalPngBytes = decodePngDataUrl(preview.originalPreviewDataUrl);
+    const residualPngBytes = decodePngDataUrl(preview.residualPreviewDataUrl);
+
+    if (!originalPngBytes || !residualPngBytes) {
+      drawParagraphCard(
+        "ELA Visual Comparison",
+        "ELA preview payload could not be decoded.",
+        { fillColor: THEME.cardBgAlt, textColor: THEME.muted }
+      );
+      return;
+    }
+
+    const [originalImage, residualImage] = await Promise.all([
+      pdfDoc.embedPng(originalPngBytes),
+      pdfDoc.embedPng(residualPngBytes),
+    ]);
+
+    const sectionHeight = 228;
+    ensureSpace(sectionHeight + 10);
+    const top = cursorY;
+    const cardPadding = 10;
+    const gap = 10;
+    const panelWidth = (CONTENT_WIDTH - cardPadding * 2 - gap) / 2;
+    const panelHeight = 176;
+
+    page.drawRectangle({
+      x: MARGIN_X,
+      y: top - sectionHeight,
+      width: CONTENT_WIDTH,
+      height: sectionHeight,
+      color: THEME.cardBg,
+      borderColor: THEME.border,
+      borderWidth: 1,
+    });
+
+    page.drawText("Visual Pair: Original vs ELA Heatmap", {
+      x: MARGIN_X + cardPadding,
+      y: top - 18,
+      size: 10,
+      font: headingFont,
+      color: THEME.muted,
+    });
+
+    const originalPanelX = MARGIN_X + cardPadding;
+    const residualPanelX = originalPanelX + panelWidth + gap;
+    const panelY = top - 38 - panelHeight;
+
+    page.drawRectangle({
+      x: originalPanelX,
+      y: panelY,
+      width: panelWidth,
+      height: panelHeight,
+      color: rgb(0.99, 0.99, 0.995),
+      borderColor: THEME.border,
+      borderWidth: 1,
+    });
+
+    page.drawRectangle({
+      x: residualPanelX,
+      y: panelY,
+      width: panelWidth,
+      height: panelHeight,
+      color: rgb(0.99, 0.99, 0.995),
+      borderColor: THEME.border,
+      borderWidth: 1,
+    });
+
+    page.drawText("Original", {
+      x: originalPanelX + 8,
+      y: panelY + panelHeight - 14,
+      size: 8.5,
+      font: headingFont,
+      color: THEME.muted,
+    });
+    page.drawText("ELA Heatmap", {
+      x: residualPanelX + 8,
+      y: panelY + panelHeight - 14,
+      size: 8.5,
+      font: headingFont,
+      color: THEME.muted,
+    });
+
+    const drawableHeight = panelHeight - 24;
+    const drawableWidth = panelWidth - 12;
+    const originalSize = fitImageInBox(
+      originalImage.width,
+      originalImage.height,
+      drawableWidth,
+      drawableHeight
+    );
+    const residualSize = fitImageInBox(
+      residualImage.width,
+      residualImage.height,
+      drawableWidth,
+      drawableHeight
+    );
+
+    const originalImageX = originalPanelX + (panelWidth - originalSize.width) / 2;
+    const originalImageY = panelY + 6 + (drawableHeight - originalSize.height) / 2;
+    page.drawImage(originalImage, {
+      x: originalImageX,
+      y: originalImageY,
+      width: originalSize.width,
+      height: originalSize.height,
+    });
+
+    const residualImageX = residualPanelX + (panelWidth - residualSize.width) / 2;
+    const residualImageY = panelY + 6 + (drawableHeight - residualSize.height) / 2;
+    page.drawImage(residualImage, {
+      x: residualImageX,
+      y: residualImageY,
+      width: residualSize.width,
+      height: residualSize.height,
+    });
+
+    const caption =
+      "Heatmap color intensity reflects recompression residual magnitude (higher intensity indicates stronger local inconsistency).";
+    const captionLines = wrapText(caption, bodyFont, 8.5, CONTENT_WIDTH - cardPadding * 2);
+    let captionY = panelY - 6;
+    for (const line of captionLines) {
+      page.drawText(line, {
+        x: MARGIN_X + cardPadding,
+        y: captionY,
+        size: 8.5,
+        font: bodyFont,
+        color: THEME.muted,
+      });
+      captionY -= 10;
+    }
+
+    cursorY -= sectionHeight + 12;
+  }
+
   addPage();
 
   drawMetaCards();
@@ -826,6 +1039,9 @@ export async function generateForensicReportPdf(
 
   drawSectionTitle("Snapshot Metrics");
   drawMetricTiles();
+
+  drawSectionTitle("ELA Visual Evidence");
+  await drawElaVisualComparison();
 
   drawSectionTitle("Risk Signals");
   drawRiskSignals();

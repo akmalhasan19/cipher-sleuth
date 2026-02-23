@@ -14,7 +14,7 @@ const envSchema = z.object({
   TURNSTILE_SECRET_KEY: z.string().min(1).optional(),
   GEMINI_API_KEY: z.string().optional(),
   GOOGLE_API_KEY: z.string().optional(),
-  GEMINI_MODEL: z.string().min(1).default("gemini-3-flash-preview"),
+  GEMINI_MODEL: z.string().min(1).default("gemini-2.5-flash-preview"),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().min(1).default("gpt-4o-mini"),
   OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),

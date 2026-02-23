@@ -359,10 +359,8 @@ export async function POST(request: Request) {
         errorMessage: null as string | null,
       },
       llm: {
-        blockedForGuest: !access.isLoggedIn,
-        effectiveEnabled: access.isLoggedIn
-          ? env.ENABLE_LLM_ORCHESTRATOR === "true"
-          : false,
+        blockedForGuest: false,
+        effectiveEnabled: env.ENABLE_LLM_ORCHESTRATOR === "true",
       },
     };
 
@@ -565,13 +563,6 @@ export async function POST(request: Request) {
       score.finalTrustScore,
       agentResults
     );
-    const orchestrationEnv = access.isLoggedIn
-      ? env
-      : {
-          ...env,
-          ENABLE_LLM_ORCHESTRATOR: "false" as const,
-        };
-
     const orchestration = await runOrchestratorSynthesis(
       {
         analysisId,
@@ -582,7 +573,7 @@ export async function POST(request: Request) {
         verdictLabel,
         agentResults,
       },
-      orchestrationEnv
+      env
     );
     const forensicBreakdown = buildForensicBreakdown({
       analysisId,

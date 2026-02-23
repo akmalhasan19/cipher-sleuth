@@ -71,7 +71,7 @@ describe("Guest protection enforcement", () => {
     expect(payload.security?.guestIpRateLimit?.usedCount).toBe(16);
   });
 
-  it("forces LLM off for guest even when global LLM toggle is enabled", async () => {
+  it("allows LLM for guest when global LLM toggle is enabled", async () => {
     vi.stubEnv("ENABLE_GUEST_CAPTCHA", "false");
     vi.stubEnv("ENABLE_GUEST_IP_RATE_LIMIT", "false");
     vi.stubEnv("ENABLE_LLM_ORCHESTRATOR", "true");
@@ -104,14 +104,14 @@ describe("Guest protection enforcement", () => {
 
     expect(response.status).toBe(200);
     expect(payload.ok).toBe(true);
-    expect(payload.analysisMode).toBe("deterministic-no-ai");
-    expect(payload.guestProtection?.llm?.blockedForGuest).toBe(true);
-    expect(payload.guestProtection?.llm?.effectiveEnabled).toBe(false);
+    expect(payload.analysisMode).toBe("llm-orchestrated");
+    expect(payload.guestProtection?.llm?.blockedForGuest).toBe(false);
+    expect(payload.guestProtection?.llm?.effectiveEnabled).toBe(true);
 
     expect(orchestratorSpy).toHaveBeenCalledTimes(1);
     const envArg = orchestratorSpy.mock.calls[0]?.[1] as
       | { ENABLE_LLM_ORCHESTRATOR: "true" | "false" }
       | undefined;
-    expect(envArg?.ENABLE_LLM_ORCHESTRATOR).toBe("false");
+    expect(envArg?.ENABLE_LLM_ORCHESTRATOR).toBe("true");
   });
 });

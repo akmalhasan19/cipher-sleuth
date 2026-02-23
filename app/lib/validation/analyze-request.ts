@@ -13,6 +13,7 @@ const SUPPORTED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
 export const jsonAnalyzeSchema = z.object({
   filename: z.string().trim().min(1).max(260),
   userId: z.string().trim().min(1).max(128).optional(),
+  turnstileToken: z.string().trim().min(1).optional(),
 });
 
 export type ValidatedUpload = {

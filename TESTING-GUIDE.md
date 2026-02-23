@@ -14,6 +14,7 @@ Pastikan sudah ada:
 1. Node.js terpasang (disarankan v20+).
 2. Dependencies sudah terinstall.
 3. Project Supabase aktif (untuk test DB logging + duplicate cache).
+4. (Opsional tapi direkomendasikan) Cloudflare Turnstile site key + secret key jika mau aktifkan guest captcha.
 
 Install dependencies:
 
@@ -40,6 +41,15 @@ Lalu isi minimal ini di `.env`:
 - `ENABLE_LLM_ORCHESTRATOR=false` (boleh tetap false saat testing dasar)
 - `MAX_UPLOAD_MB=5`
 - `ANALYZE_TIMEOUT_MS=45000`
+- `ENABLE_GUEST_IP_RATE_LIMIT=true`
+- `GUEST_IP_DAILY_LIMIT=15`
+- `GUEST_IP_HASH_SALT=<secret-random-string>`
+
+Jika mau aktifkan captcha guest:
+
+- `ENABLE_GUEST_CAPTCHA=true`
+- `NEXT_PUBLIC_TURNSTILE_SITE_KEY=<your-site-key>`
+- `TURNSTILE_SECRET_KEY=<your-secret-key>`
 
 Catatan:
 - Kalau mau test mode LLM, isi juga `OPENAI_API_KEY`.
@@ -52,12 +62,15 @@ Catatan:
 Jalankan SQL migration ini di Supabase SQL Editor:
 
 - `supabase/migrations/202602230001_create_investigations.sql`
+- `supabase/migrations/202602230002_guest_ip_daily_usage.sql`
 
 Migration ini:
 - buat tabel `public.investigations`
 - unique hash untuk duplicate detection
 - enable RLS
 - policy service role
+- buat tabel `public.guest_ip_daily_usage` untuk limiter guest per-IP per-hari
+- buat function `increment_guest_ip_daily_usage(...)` untuk increment counter atomik
 
 Kalau tabel sudah pernah dibuat sebelum patch RLS, jalankan ulang blok RLS/policy (sudah ada di migration file tersebut).
 
@@ -112,7 +125,33 @@ Cara cek cepat di browser:
 
 ---
 
-### C. Test export PDF
+### C. Test guest protections (captcha + rate limit + LLM block)
+
+1. Aktifkan guest protections di `.env`:
+   - `ENABLE_GUEST_CAPTCHA=true`
+   - `ENABLE_GUEST_IP_RATE_LIMIT=true`
+   - `GUEST_IP_DAILY_LIMIT=2` (untuk test cepat)
+2. Restart `npm run dev`.
+3. Coba analyze tanpa solve captcha (atau tanpa token).
+
+Expected:
+- API reject request (`403` captcha missing/invalid).
+
+4. Solve captcha, lalu kirim 3 request guest dari browser/network yang sama.
+
+Expected:
+- request 1-2 lolos
+- request 3 kena `429` quota exceeded
+
+5. Jika `ENABLE_LLM_ORCHESTRATOR=true`, lakukan request sebagai guest.
+
+Expected:
+- mode tetap deterministic fallback (LLM diblok untuk guest)
+- pada payload ada indikasi `guestProtection.llm.effectiveEnabled = false`
+
+---
+
+### D. Test export PDF
 
 1. Setelah analisis selesai, klik `Download Report`.
 
@@ -123,7 +162,7 @@ Expected:
 
 ---
 
-### D. Test refresh behavior: scroll reset ke atas
+### E. Test refresh behavior: scroll reset ke atas
 
 1. Scroll halaman sampai tengah/bawah.
 2. Refresh browser (`Ctrl+R`).
@@ -133,7 +172,7 @@ Expected:
 
 ---
 
-### E. Test glitch text "Pixel" saat first load/refresh
+### F. Test glitch text "Pixel" saat first load/refresh
 
 1. Buka halaman pertama kali atau refresh.
 2. Perhatikan teks **Pixel** di hero headline.
@@ -161,6 +200,7 @@ Mencakup:
 - integration test report PDF
 - integration test payload contract endpoint
 - acceptance scenarios (asli tinggi, manipulasi rendah)
+- integration test guest protections
 
 ### B. Lint
 
@@ -208,11 +248,12 @@ Jalankan urutan ini:
 3. apply migration Supabase
 4. `npm run dev`
 5. test upload pertama + kedua (cache)
-6. test download PDF
-7. test refresh scroll reset + glitch Pixel
-8. `npm test`
-9. `npm run lint`
-10. `npm run build`
+6. test guest protections (captcha + rate limit)
+7. test download PDF
+8. test refresh scroll reset + glitch Pixel
+9. `npm test`
+10. `npm run lint`
+11. `npm run build`
 
 Kalau semua lolos, project siap untuk demo/submit.
 
@@ -233,7 +274,15 @@ Kalau semua lolos, project siap untuk demo/submit.
 - Pastikan request masih di sesi user/guest yang sama
 - report disimpan per session owner untuk proteksi akses
 
+### Captcha selalu gagal
+- pastikan `NEXT_PUBLIC_TURNSTILE_SITE_KEY` dan `TURNSTILE_SECRET_KEY` pasangan yang benar
+- cek response `security.captcha.status` di payload API
+
+### Guest rate limit tidak jalan
+- pastikan `ENABLE_GUEST_IP_RATE_LIMIT=true`
+- apply migration `202602230002_guest_ip_daily_usage.sql`
+- cek nilai `security.guestIpRateLimit` di response
+
 ### Scroll tidak reset saat refresh
 - Pastikan kamu tes dengan hard refresh normal browser
 - cek tidak ada extension browser yang override scroll restoration
-

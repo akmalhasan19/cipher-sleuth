@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, useInView } from "framer-motion";
 import { Upload } from "lucide-react";
+import Script from "next/script";
 import { ensureWebpFile } from "../lib/ensure-webp-file";
 
 const stripItems = [
@@ -15,6 +16,25 @@ const stripItems = [
 ];
 
 const GLITCH_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (
+        container: string | HTMLElement,
+        options: {
+          sitekey: string;
+          callback?: (token: string) => void;
+          "expired-callback"?: () => void;
+          "error-callback"?: () => void;
+          theme?: "light" | "dark" | "auto";
+        }
+      ) => string;
+      reset: (widgetId?: string) => void;
+    };
+  }
+}
 
 type AnalysisResult = {
   analysisId: string;
@@ -31,6 +51,69 @@ type AnalysisResult = {
     elapsedMs: number;
   }[];
 };
+
+function getLatencyStyle(elapsedMs: number): {
+  label: "FAST" | "NORMAL" | "SLOW";
+  className: string;
+} {
+  if (elapsedMs <= 200) {
+    return {
+      label: "FAST",
+      className:
+        "border-green-300/80 bg-green-500/25 text-green-100 shadow-[0_0_8px_rgba(74,222,128,0.45)]",
+    };
+  }
+
+  if (elapsedMs <= 250) {
+    return {
+      label: "NORMAL",
+      className:
+        "border-yellow-300/80 bg-yellow-500/25 text-yellow-100 shadow-[0_0_8px_rgba(250,204,21,0.45)]",
+    };
+  }
+
+  return {
+    label: "SLOW",
+    className:
+      "border-red-300/80 bg-red-500/25 text-red-100 shadow-[0_0_8px_rgba(248,113,113,0.45)]",
+  };
+}
+
+function AgentLatencyLine({
+  agentName,
+  status,
+  elapsedMs,
+  delay = 0,
+  start = false,
+}: {
+  agentName: string;
+  status: string;
+  elapsedMs: number;
+  delay?: number;
+  start?: boolean;
+}) {
+  const latency = getLatencyStyle(elapsedMs);
+
+  return (
+    <div className="min-h-[1.5em]">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={start ? { opacity: 1 } : { opacity: 0 }}
+        transition={{ duration: 0.3, delay: start ? delay / 1000 : 0 }}
+        className="flex flex-wrap items-center gap-2"
+      >
+        <span>
+          {`> [${agentName.toUpperCase()}] ${status === "completed" ? "OK" : "FAILED"}`}
+        </span>
+        <span
+          className={`rounded-md border px-2 py-0.5 text-xs font-bold tracking-wide md:text-sm ${latency.className}`}
+        >
+          {`${elapsedMs}MS ${latency.label}`}
+        </span>
+      </motion.div>
+    </div>
+  );
+}
 
 function TypewriterLine({ text, delay = 0, speed = 50, className = "", start = false, loopDelay = 10000 }: { text: string, delay?: number, speed?: number, className?: string, start?: boolean, loopDelay?: number }) {
   const [displayedText, setDisplayedText] = useState("");
@@ -143,11 +226,59 @@ export function HeroSection() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [isTurnstileLoaded, setIsTurnstileLoaded] = useState(false);
   const [boardOverflowBottom, setBoardOverflowBottom] = useState(0);
   const boardAreaRef = useRef<HTMLDivElement | null>(null);
   const stickyNotesRef = useRef<HTMLDivElement | null>(null);
   const chalkboardRef = useRef<HTMLDivElement | null>(null);
+  const turnstileContainerRef = useRef<HTMLDivElement | null>(null);
+  const turnstileWidgetIdRef = useRef<string | null>(null);
   const isChalkboardInView = useInView(chalkboardRef, { once: true, margin: "-100px" });
+
+  const resetTurnstileWidget = useCallback(() => {
+    if (!turnstileWidgetIdRef.current || !window.turnstile) {
+      return;
+    }
+
+    window.turnstile.reset(turnstileWidgetIdRef.current);
+    setTurnstileToken(null);
+  }, []);
+
+  const renderTurnstileWidget = useCallback(() => {
+    if (!TURNSTILE_SITE_KEY || !isTurnstileLoaded) {
+      return;
+    }
+
+    if (!window.turnstile || !turnstileContainerRef.current) {
+      return;
+    }
+
+    if (turnstileWidgetIdRef.current) {
+      return;
+    }
+
+    turnstileWidgetIdRef.current = window.turnstile.render(
+      turnstileContainerRef.current,
+      {
+        sitekey: TURNSTILE_SITE_KEY,
+        theme: "dark",
+        callback: (token) => {
+          setTurnstileToken(token);
+        },
+        "expired-callback": () => {
+          setTurnstileToken(null);
+        },
+        "error-callback": () => {
+          setTurnstileToken(null);
+        },
+      }
+    );
+  }, [isTurnstileLoaded]);
+
+  useEffect(() => {
+    renderTurnstileWidget();
+  }, [renderTurnstileWidget]);
 
   useEffect(() => {
     const boardArea = boardAreaRef.current;
@@ -193,7 +324,7 @@ export function HeroSection() {
     };
   }, [isChalkboardInView]);
 
-  const handleIncomingFile = async (inputFile: File) => {
+  const handleIncomingFile = useCallback(async (inputFile: File) => {
     try {
       setIsAnalyzing(true);
       setAnalysisError(null);
@@ -201,6 +332,9 @@ export function HeroSection() {
       const webpFile = await ensureWebpFile(inputFile);
       const formData = new FormData();
       formData.append("file", webpFile);
+      if (turnstileToken) {
+        formData.append("turnstileToken", turnstileToken);
+      }
 
       const response = await fetch("/api/analyze", {
         method: "POST",
@@ -228,9 +362,10 @@ export function HeroSection() {
       setAnalysisError(message);
       setAnalysisResult(null);
     } finally {
+      resetTurnstileWidget();
       setIsAnalyzing(false);
     }
-  };
+  }, [resetTurnstileWidget, turnstileToken]);
 
   useEffect(() => {
     const handleGlobalDrop = (event: DragEvent) => {
@@ -245,10 +380,20 @@ export function HeroSection() {
     return () => {
       window.removeEventListener("drop", handleGlobalDrop);
     };
-  }, []);
+  }, [handleIncomingFile]);
 
   return (
     <section className="space-y-6 py-4">
+      {TURNSTILE_SITE_KEY ? (
+        <Script
+          id="turnstile-api"
+          src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+          strategy="afterInteractive"
+          onLoad={() => {
+            setIsTurnstileLoaded(true);
+          }}
+        />
+      ) : null}
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
@@ -286,6 +431,8 @@ export function HeroSection() {
         </p>
 
         <label
+          id="drop-evidence-button"
+          onClick={() => window.dispatchEvent(new CustomEvent('reverse-arrow'))}
           className={`mx-auto mt-7 flex w-full max-w-md cursor-pointer items-center justify-center gap-2 rounded-full border-4 border-black px-5 py-3 text-sm font-bold shadow-[3px_3px_0_#000] md:shadow-[5px_5px_0_#000] transition ${isDragOver ? "bg-[#d5f5df]" : "bg-[#f8f4ea]"
             }`}
           onDragEnter={(event) => {
@@ -323,6 +470,15 @@ export function HeroSection() {
           <Upload className="h-4 w-4" />
           Drop Evidence Here
         </label>
+        {TURNSTILE_SITE_KEY ? (
+          <div className="mx-auto mt-3 flex w-full max-w-md justify-center">
+            <div
+              ref={turnstileContainerRef}
+              className="min-h-[66px]"
+              data-testid="turnstile-widget"
+            />
+          </div>
+        ) : null}
         {isAnalyzing ? (
           <p className="mt-3 text-xs font-semibold uppercase text-[#f3ebda]/95">
             Running deterministic multi-agent analysis...
@@ -338,12 +494,6 @@ export function HeroSection() {
             <p className="text-xs font-bold uppercase text-[#1d2a24]">
               Analysis #{analysisResult.analysisId}
             </p>
-            <p className="mt-2 text-2xl font-extrabold text-[#1d2a24]">
-              Trust Score: {analysisResult.finalTrustScore}/100
-            </p>
-            <p className="text-sm font-semibold text-[#2d3f35]">
-              Verdict: {analysisResult.verdictLabel}
-            </p>
             <p className="mt-2 text-xs font-medium text-[#2d3f35]">
               {analysisResult.reportSummary}
             </p>
@@ -353,23 +503,6 @@ export function HeroSection() {
             <p className="mt-1 text-[11px] font-mono text-[#33473d]">
               Generated: {new Date(analysisResult.generatedAt).toLocaleString()}
             </p>
-
-            {analysisResult.agentResults && analysisResult.agentResults.length > 0 && (
-              <div className="mt-4 space-y-2">
-                <p className="text-xs font-bold uppercase text-[#1d2a24]">Agent Status</p>
-                {analysisResult.agentResults.map((agent, idx) => (
-                  <div key={idx} className="flex items-center justify-between rounded-lg border-2 border-black bg-white px-3 py-2 text-xs shadow-[2px_2px_0_#000]">
-                    <span className="font-bold text-[#1d2a24]">{agent.agentName}</span>
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono text-[#33473d]">{agent.elapsedMs}ms</span>
-                      <span className={`font-bold uppercase ${agent.status === 'completed' ? 'text-green-700' : 'text-red-700'}`}>
-                        {agent.status}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
 
             <a
               href={analysisResult.reportDownloadUrl}
@@ -459,13 +592,40 @@ export function HeroSection() {
 
             {/* Terminal Output */}
             <div className="mt-10 flex flex-col gap-2 text-sm md:text-xl">
-              <TypewriterLine start={isChalkboardInView} text="> [SYSTEM] Initiating Forensic Audit..." delay={500} loopDelay={12000} />
-              <TypewriterLine start={isChalkboardInView} text="> [EXIF-BOT] Analyzing metadata... OK (No anomalies)" delay={2000} loopDelay={12000} />
-              <TypewriterLine start={isChalkboardInView} text="> [NOISE-BOT] Running ELA scan... OK (Uniform compression)" delay={4000} loopDelay={12000} />
-              <TypewriterLine start={isChalkboardInView} text="> [DWT-SVD] Checking structural integrity... OK (No watermarks)" delay={6000} loopDelay={12000} />
-              <TypewriterLine start={isChalkboardInView} text="> ----------------------------------------" delay={8000} speed={15} loopDelay={12000} />
-              <TypewriterLine start={isChalkboardInView} text="> VERDICT: LIKELY AUTHENTIC" delay={8500} loopDelay={12000} className="mt-2 text-lg md:text-2xl font-bold text-green-400/90 drop-shadow-[0_0_2px_rgba(74,222,128,0.8)]" />
-              <TypewriterLine start={isChalkboardInView} text="> TRUST SCORE: 98/100" delay={9500} loopDelay={12000} className="text-lg md:text-2xl font-bold text-white" />
+              {analysisResult ? (
+                <>
+                  <TypewriterLine start={isChalkboardInView} text={`> [SYSTEM] INITIATING FORENSIC AUDIT FOR #${analysisResult.analysisId.substring(0, 8)}...`} delay={500} loopDelay={1200000} />
+                  {analysisResult.agentResults?.map((agent, idx) => (
+                    <AgentLatencyLine
+                      key={`${agent.agentName}-${idx}`}
+                      start={isChalkboardInView}
+                      agentName={agent.agentName}
+                      status={agent.status}
+                      elapsedMs={agent.elapsedMs}
+                      delay={1500 + (idx * 1000)}
+                    />
+                  ))}
+                  <TypewriterLine start={isChalkboardInView} text="> ----------------------------------------" delay={4500} speed={15} loopDelay={1200000} />
+                  <TypewriterLine 
+                    start={isChalkboardInView} 
+                    text={`> VERDICT: ${analysisResult.verdictLabel.toUpperCase()}`} 
+                    delay={5000} 
+                    loopDelay={1200000} 
+                    className={`mt-2 text-lg md:text-2xl font-bold ${analysisResult.finalTrustScore >= 90 ? 'text-green-400/90 drop-shadow-[0_0_2px_rgba(74,222,128,0.8)]' : analysisResult.finalTrustScore >= 50 ? 'text-yellow-400/90 drop-shadow-[0_0_2px_rgba(250,204,21,0.8)]' : 'text-red-400/90 drop-shadow-[0_0_2px_rgba(248,113,113,0.8)]'}`} 
+                  />
+                  <TypewriterLine start={isChalkboardInView} text={`> TRUST SCORE: ${analysisResult.finalTrustScore}/100`} delay={6000} loopDelay={1200000} className="text-lg md:text-2xl font-bold text-white" />
+                </>
+              ) : (
+                <>
+                  <TypewriterLine start={isChalkboardInView} text="> [SYSTEM] Initiating Forensic Audit..." delay={500} loopDelay={12000} />
+                  <TypewriterLine start={isChalkboardInView} text="> [EXIF-BOT] Analyzing metadata... OK (No anomalies)" delay={2000} loopDelay={12000} />
+                  <TypewriterLine start={isChalkboardInView} text="> [NOISE-BOT] Running ELA scan... OK (Uniform compression)" delay={4000} loopDelay={12000} />
+                  <TypewriterLine start={isChalkboardInView} text="> [DWT-SVD] Checking structural integrity... OK (No watermarks)" delay={6000} loopDelay={12000} />
+                  <TypewriterLine start={isChalkboardInView} text="> ----------------------------------------" delay={8000} speed={15} loopDelay={12000} />
+                  <TypewriterLine start={isChalkboardInView} text="> VERDICT: LIKELY AUTHENTIC" delay={8500} loopDelay={12000} className="mt-2 text-lg md:text-2xl font-bold text-green-400/90 drop-shadow-[0_0_2px_rgba(74,222,128,0.8)]" />
+                  <TypewriterLine start={isChalkboardInView} text="> TRUST SCORE: 98/100" delay={9500} loopDelay={12000} className="text-lg md:text-2xl font-bold text-white" />
+                </>
+              )}
             </div>
           </div>
         </div>

@@ -1,12 +1,77 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion";
 import { HeroSection } from "./components/hero-section";
 import { ReviewsSection } from "./components/reviews-section";
 import { TopNavigation } from "./components/top-navigation";
 
+function AnimatedArrow({ path, isReversing, onDone }: { path: string; isReversing: boolean; onDone: () => void }) {
+  const pathRef = useRef<SVGPathElement>(null);
+  const progress = useMotionValue(0);
+  const [head, setHead] = useState<{ x: number; y: number; angle: number; visible: boolean } | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = progress.on("change", (v) => {
+      const el = pathRef.current;
+      if (!el) return;
+      const total = el.getTotalLength();
+      const dist = v * total;
+      const pt = el.getPointAtLength(dist);
+      const ptBehind = el.getPointAtLength(Math.max(0, dist - 2));
+      const angle = Math.atan2(pt.y - ptBehind.y, pt.x - ptBehind.x) * (180 / Math.PI);
+      setHead({ x: pt.x, y: pt.y, angle, visible: v > 0.001 });
+    });
+    return () => unsubscribe();
+  }, [progress]);
+
+  useEffect(() => {
+    if (isReversing) {
+      const controls = animate(progress, 0, {
+        duration: 1.5,
+        ease: "easeInOut",
+        onComplete: onDone,
+      });
+      return () => controls.stop();
+    } else {
+      const controls = animate(progress, 1, {
+        duration: 2.5,
+        ease: "easeInOut",
+      });
+      return () => controls.stop();
+    }
+  }, [isReversing, progress, onDone]);
+
+  return (
+    <svg className="pointer-events-none absolute inset-0 z-50 h-full w-full">
+      <motion.path
+        ref={pathRef}
+        d={path}
+        fill="none"
+        stroke="#e4dfcb"
+        strokeWidth="6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={{ filter: "drop-shadow(3px 3px 0px #000)", pathLength: progress }}
+      />
+      {head && head.visible && (
+        <path
+          d="M -10 -10 L 6 0 L -10 10 Z"
+          fill="#e4dfcb"
+          stroke="#e4dfcb"
+          strokeWidth="6"
+          strokeLinejoin="round"
+          style={{ filter: "drop-shadow(3px 3px 0px #000)" }}
+          transform={`translate(${head.x}, ${head.y}) rotate(${head.angle})`}
+        />
+      )}
+    </svg>
+  );
+}
+
 export default function HomePage() {
   const [isGlobalDragOver, setIsGlobalDragOver] = useState(false);
+  const [arrowState, setArrowState] = useState<{ path: string; reversing: boolean } | null>(null);
 
   useEffect(() => {
     const handleDragOver = (e: DragEvent) => {
@@ -27,6 +92,7 @@ export default function HomePage() {
     const handleDrop = (e: DragEvent) => {
       e.preventDefault();
       setIsGlobalDragOver(false);
+      window.dispatchEvent(new CustomEvent('reverse-arrow'));
     };
 
     window.addEventListener("dragover", handleDragOver);
@@ -40,9 +106,47 @@ export default function HomePage() {
     };
   }, []);
 
+  useEffect(() => {
+    const handleTriggerArrow = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const { startX, startY } = customEvent.detail;
+
+      const dropBtn = document.getElementById("drop-evidence-button");
+      if (!dropBtn) return;
+
+      const dropRect = dropBtn.getBoundingClientRect();
+      const endX = dropRect.right + 16;
+      const endY = dropRect.top + dropRect.height / 2 + window.scrollY;
+      const radius = 32;
+
+      const path = `M ${startX} ${startY} L ${startX} ${endY - radius} Q ${startX} ${endY}, ${startX - radius} ${endY} L ${endX} ${endY}`;
+      setArrowState({ path, reversing: false });
+    };
+
+    const handleReverseArrow = () => {
+      setArrowState((prev) => prev ? { ...prev, reversing: true } : null);
+    };
+
+    window.addEventListener("trigger-arrow", handleTriggerArrow);
+    window.addEventListener("reverse-arrow", handleReverseArrow);
+    return () => {
+      window.removeEventListener("trigger-arrow", handleTriggerArrow);
+      window.removeEventListener("reverse-arrow", handleReverseArrow);
+    };
+  }, []);
+
   return (
     <main className="relative min-h-screen bg-[#2d5a45] text-black">
-      {isGlobalDragOver && (
+      <AnimatePresence>
+        {arrowState && (
+          <AnimatedArrow
+            key={arrowState.path}
+            path={arrowState.path}
+            isReversing={arrowState.reversing}
+            onDone={() => setArrowState(null)}
+          />
+        )}
+      </AnimatePresence>      {isGlobalDragOver && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm transition-all">
           <div className="pointer-events-none flex flex-col items-center justify-center rounded-3xl border-4 border-dashed border-[#e2b300] bg-[#f8f4ea] p-12 text-center shadow-[8px_8px_0_#000]">
             <svg

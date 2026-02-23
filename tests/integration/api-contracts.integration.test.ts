@@ -55,6 +55,25 @@ const analyzePostSuccessSchema = z.object({
       errorMessage: z.string().nullable(),
     }),
   }),
+  guestProtection: z.object({
+    captcha: z.object({
+      enabled: z.boolean(),
+      status: z.string().min(1),
+      errorMessage: z.string().nullable(),
+    }),
+    ipRateLimit: z.object({
+      enabled: z.boolean(),
+      status: z.string().min(1),
+      limit: z.number().int().min(1),
+      usedCount: z.number().int().nonnegative().nullable(),
+      remaining: z.number().int().nonnegative().nullable(),
+      errorMessage: z.string().nullable(),
+    }),
+    llm: z.object({
+      blockedForGuest: z.boolean(),
+      effectiveEnabled: z.boolean(),
+    }),
+  }),
 });
 
 const analyzeGetSchema = z.object({
@@ -63,6 +82,9 @@ const analyzeGetSchema = z.object({
   capabilities: z.object({
     llmEnabled: z.boolean(),
     duplicateDetectionEnabled: z.boolean(),
+    guestCaptchaEnabled: z.boolean(),
+    guestIpRateLimitEnabled: z.boolean(),
+    guestIpDailyLimit: z.number().int().min(1),
     llmModel: z.string().min(1),
     maxUploadMb: z.number().int().positive(),
     guestFreeAnalysisLimit: z.number().int().min(1),

@@ -4,6 +4,7 @@ import { runAllAgents } from "@/app/lib/agents/run-all-agents";
 import type { AgentResult } from "@/app/lib/agents/types";
 import { saveAnalysisRecord } from "@/app/lib/db/analysis-session-store";
 import { storeEvidenceAssetIfLoggedIn } from "@/app/lib/db/evidence-storage";
+import { consumeGuestIpDailyLimit } from "@/app/lib/db/guest-ip-rate-limit";
 import {
   findInvestigationByHash,
   persistInvestigation,
@@ -25,6 +26,7 @@ import {
   validateAndNormalizeUpload,
 } from "@/app/lib/validation/analyze-request";
 import { getAppEnv } from "@/app/lib/validation/env";
+import { verifyTurnstileToken } from "@/app/lib/validation/turnstile";
 
 export const runtime = "nodejs";
 
@@ -46,6 +48,89 @@ function buildGuestLimitResponse() {
         "Guest usage limit reached. Please log in to continue analyzing and storing evidence assets.",
     },
     { status: 403 }
+  );
+}
+
+function buildGuestCaptchaErrorResponse(
+  status:
+    | "verified"
+    | "missing-token"
+    | "secret-missing"
+    | "rejected"
+    | "request-failed",
+  errorMessage: string | null
+) {
+  const errorByStatus: Record<typeof status, string> = {
+    verified: "Captcha verification unexpectedly returned success state.",
+    "missing-token": "Guest captcha token is missing.",
+    "secret-missing":
+      "Guest captcha is enabled but TURNSTILE_SECRET_KEY is not configured.",
+    rejected: "Captcha verification failed.",
+    "request-failed": "Captcha verification service is temporarily unavailable.",
+  };
+
+  const responseStatus =
+    status === "secret-missing" || status === "request-failed" ? 503 : 403;
+
+  return NextResponse.json(
+    {
+      ok: false,
+      error: errorByStatus[status],
+      detail: errorMessage,
+      security: {
+        captcha: {
+          status,
+        },
+      },
+    },
+    { status: responseStatus }
+  );
+}
+
+function buildGuestIpRateLimitErrorResponse(
+  status: "blocked" | "error",
+  options: {
+    limit: number;
+    usedCount: number | null;
+    remaining: number | null;
+    errorMessage: string | null;
+  }
+) {
+  if (status === "blocked") {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "Guest daily request quota exceeded for this network. Please try again tomorrow or log in.",
+        security: {
+          guestIpRateLimit: {
+            status,
+            limit: options.limit,
+            usedCount: options.usedCount,
+            remaining: options.remaining,
+          },
+        },
+      },
+      { status: 429 }
+    );
+  }
+
+  return NextResponse.json(
+    {
+      ok: false,
+      error:
+        "Guest protection service is temporarily unavailable. Please try again later.",
+      detail: options.errorMessage,
+      security: {
+        guestIpRateLimit: {
+          status,
+          limit: options.limit,
+          usedCount: options.usedCount,
+          remaining: options.remaining,
+        },
+      },
+    },
+    { status: 503 }
   );
 }
 
@@ -106,6 +191,7 @@ function buildAccessPayload(access: AccessContext, guestLimit: number) {
 type ParsedAnalyzeRequest = {
   uploadedFile: File | null;
   userIdFromBody?: string;
+  turnstileToken?: string;
 };
 
 async function parseAnalyzeRequest(request: Request): Promise<ParsedAnalyzeRequest> {
@@ -113,11 +199,14 @@ async function parseAnalyzeRequest(request: Request): Promise<ParsedAnalyzeReque
 
   let uploadedFile: File | null = null;
   let userIdFromBody: string | undefined;
+  let turnstileToken: string | undefined;
 
   if (contentType.includes("multipart/form-data")) {
     const formData = await request.formData();
     const file = formData.get("file");
     const userId = formData.get("userId");
+    const token =
+      formData.get("turnstileToken") ?? formData.get("cf-turnstile-response");
 
     if (file instanceof File) {
       uploadedFile = file;
@@ -125,15 +214,24 @@ async function parseAnalyzeRequest(request: Request): Promise<ParsedAnalyzeReque
     if (typeof userId === "string") {
       userIdFromBody = userId;
     }
+    if (typeof token === "string") {
+      turnstileToken = token;
+    }
   } else if (contentType.includes("application/json")) {
     const body = await request.json();
     const parsed = jsonAnalyzeSchema.safeParse(body);
     if (parsed.success) {
       userIdFromBody = parsed.data.userId;
+      turnstileToken = parsed.data.turnstileToken;
     }
   }
 
-  return { uploadedFile, userIdFromBody };
+  const tokenFromHeader = request.headers.get("x-turnstile-token");
+  if (!turnstileToken && tokenFromHeader?.trim()) {
+    turnstileToken = tokenFromHeader.trim();
+  }
+
+  return { uploadedFile, userIdFromBody, turnstileToken };
 }
 
 function sampleAgentResults(): AgentResult[] {
@@ -207,6 +305,9 @@ export async function GET() {
     capabilities: {
       llmEnabled: env.ENABLE_LLM_ORCHESTRATOR === "true",
       duplicateDetectionEnabled: env.ENABLE_DUPLICATE_DETECTION === "true",
+      guestCaptchaEnabled: env.ENABLE_GUEST_CAPTCHA === "true",
+      guestIpRateLimitEnabled: env.ENABLE_GUEST_IP_RATE_LIMIT === "true",
+      guestIpDailyLimit: env.GUEST_IP_DAILY_LIMIT,
       llmModel: env.OPENAI_MODEL,
       maxUploadMb: env.MAX_UPLOAD_MB,
       guestFreeAnalysisLimit: env.GUEST_FREE_ANALYSIS_LIMIT,
@@ -241,6 +342,28 @@ export async function POST(request: Request) {
       return buildGuestLimitResponse();
     }
 
+    const guestProtection = {
+      captcha: {
+        enabled: env.ENABLE_GUEST_CAPTCHA === "true",
+        status: access.isLoggedIn ? "not-applicable" : "skipped-disabled",
+        errorMessage: null as string | null,
+      },
+      ipRateLimit: {
+        enabled: env.ENABLE_GUEST_IP_RATE_LIMIT === "true",
+        status: access.isLoggedIn ? "not-applicable" : "skipped-disabled",
+        limit: env.GUEST_IP_DAILY_LIMIT,
+        usedCount: null as number | null,
+        remaining: null as number | null,
+        errorMessage: null as string | null,
+      },
+      llm: {
+        blockedForGuest: !access.isLoggedIn,
+        effectiveEnabled: access.isLoggedIn
+          ? env.ENABLE_LLM_ORCHESTRATOR === "true"
+          : false,
+      },
+    };
+
     if (!parsedRequest.uploadedFile) {
       return NextResponse.json(
         { ok: false, error: "No image file provided. Submit multipart/form-data with field 'file'." },
@@ -257,6 +380,50 @@ export async function POST(request: Request) {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid upload payload.";
       return buildValidationErrorResponse(message);
+    }
+
+    if (!access.isLoggedIn) {
+      if (env.ENABLE_GUEST_CAPTCHA === "true") {
+        const clientIp =
+          request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+          request.headers.get("x-real-ip")?.trim() ??
+          null;
+
+        const captcha = await verifyTurnstileToken({
+          token: parsedRequest.turnstileToken,
+          secretKey: env.TURNSTILE_SECRET_KEY,
+          remoteIp: clientIp,
+          timeoutMs: Math.min(env.ANALYZE_TIMEOUT_MS, 10000),
+        });
+
+        guestProtection.captcha.status = captcha.status;
+        guestProtection.captcha.errorMessage = captcha.errorMessage;
+
+        if (!captcha.success) {
+          return buildGuestCaptchaErrorResponse(captcha.status, captcha.errorMessage);
+        }
+      }
+
+      const ipQuota = await consumeGuestIpDailyLimit({
+        request,
+        enabled: env.ENABLE_GUEST_IP_RATE_LIMIT === "true",
+        dailyLimit: env.GUEST_IP_DAILY_LIMIT,
+        hashSalt: env.GUEST_IP_HASH_SALT,
+      });
+
+      guestProtection.ipRateLimit.status = ipQuota.status;
+      guestProtection.ipRateLimit.usedCount = ipQuota.usedCount;
+      guestProtection.ipRateLimit.remaining = ipQuota.remaining;
+      guestProtection.ipRateLimit.errorMessage = ipQuota.errorMessage;
+
+      if (ipQuota.status === "blocked" || ipQuota.status === "error") {
+        return buildGuestIpRateLimitErrorResponse(ipQuota.status, {
+          limit: ipQuota.limit,
+          usedCount: ipQuota.usedCount,
+          remaining: ipQuota.remaining,
+          errorMessage: ipQuota.errorMessage,
+        });
+      }
     }
 
     const duplicateDetectionEnabled = env.ENABLE_DUPLICATE_DETECTION === "true";
@@ -363,6 +530,7 @@ export async function POST(request: Request) {
               errorMessage: null,
             },
           },
+          guestProtection,
         });
 
         applyGuestCookies(response, access);
@@ -387,6 +555,13 @@ export async function POST(request: Request) {
       score.finalTrustScore,
       agentResults
     );
+    const orchestrationEnv = access.isLoggedIn
+      ? env
+      : {
+          ...env,
+          ENABLE_LLM_ORCHESTRATOR: "false" as const,
+        };
+
     const orchestration = await runOrchestratorSynthesis(
       {
         analysisId,
@@ -397,7 +572,7 @@ export async function POST(request: Request) {
         verdictLabel,
         agentResults,
       },
-      env
+      orchestrationEnv
     );
     const forensicBreakdown = buildForensicBreakdown({
       analysisId,
@@ -504,6 +679,7 @@ export async function POST(request: Request) {
           errorMessage: persistResult.errorMessage,
         },
       },
+      guestProtection,
     });
 
     applyGuestCookies(response, access);

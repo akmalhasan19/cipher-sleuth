@@ -13,6 +13,9 @@ Expected:
 - `capabilities` object:
   - `llmEnabled: boolean`
   - `duplicateDetectionEnabled: boolean`
+  - `guestCaptchaEnabled: boolean`
+  - `guestIpRateLimitEnabled: boolean`
+  - `guestIpDailyLimit: number`
   - `llmModel: string`
   - `maxUploadMb: number`
   - `guestFreeAnalysisLimit: number`
@@ -50,6 +53,10 @@ Expected:
   - `access`
   - `database.lookup`
   - `database.persist`
+  - `guestProtection`:
+    - `captcha.status`
+    - `ipRateLimit.status`
+    - `llm.effectiveEnabled`
 
 ## `GET /api/report/[analysisId]`
 

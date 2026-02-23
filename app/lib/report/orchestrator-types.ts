@@ -13,7 +13,7 @@ export type OrchestratorInput = {
 
 export type OrchestratorSynthesis = {
   mode: "llm" | "heuristic-fallback";
-  provider: "openai" | "internal";
+  provider: "gemini" | "openai" | "internal";
   model: string;
   reportText: string;
   riskSignals: string[];

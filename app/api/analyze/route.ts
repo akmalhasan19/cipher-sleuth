@@ -15,7 +15,7 @@ import {
 } from "@/app/lib/report/build-report";
 import { buildForensicBreakdown } from "@/app/lib/report/forensic-breakdown";
 import { runOrchestratorSynthesis } from "@/app/lib/report/llm-orchestrator";
-import { SCORING_CONFIG } from "@/app/lib/scoring/scoring-config";
+import { getScoringConfig } from "@/app/lib/scoring/scoring-config";
 import { computeTrustScore } from "@/app/lib/scoring/trust-score";
 import type { Verdict } from "@/app/lib/scoring/trust-score";
 import {
@@ -272,7 +272,8 @@ function sampleAgentResults(): AgentResult[] {
 export async function GET() {
   const env = getAppEnv();
   const agentResults = sampleAgentResults();
-  const score = computeTrustScore(agentResults);
+  const scoringConfig = getScoringConfig(env.SCORING_CALIBRATION_MODE);
+  const score = computeTrustScore(agentResults, env.SCORING_CALIBRATION_MODE);
   const verdictLabel = toVerdictLabel(score.verdict);
   const orchestration = await runOrchestratorSynthesis(
     {
@@ -308,10 +309,11 @@ export async function GET() {
       guestCaptchaEnabled: env.ENABLE_GUEST_CAPTCHA === "true",
       guestIpRateLimitEnabled: env.ENABLE_GUEST_IP_RATE_LIMIT === "true",
       guestIpDailyLimit: env.GUEST_IP_DAILY_LIMIT,
-      llmModel: env.OPENAI_MODEL,
+      llmModel: env.GEMINI_MODEL,
       maxUploadMb: env.MAX_UPLOAD_MB,
       guestFreeAnalysisLimit: env.GUEST_FREE_ANALYSIS_LIMIT,
-      scoringConfig: SCORING_CONFIG,
+      scoringCalibrationMode: env.SCORING_CALIBRATION_MODE,
+      scoringConfig,
     },
     sample: {
       analysisMode:
@@ -553,7 +555,10 @@ export async function POST(request: Request) {
       fileHashSha256: validatedUpload.fileHashSha256,
       fileBytes,
     });
-    const score = computeTrustScore(agentResults);
+    const score = computeTrustScore(
+      agentResults,
+      env.SCORING_CALIBRATION_MODE
+    );
     const verdictLabel = toVerdictLabel(score.verdict);
     const deterministicSummary = buildReportSummary(
       score.verdict,

@@ -1,3 +1,4 @@
+import { GoogleGenAI } from "@google/genai";
 import type { AgentResult } from "../agents/types";
 import type { Verdict } from "../scoring/trust-score";
 import type { AppEnv } from "../validation/env";
@@ -126,6 +127,20 @@ function parseJsonContent(content: string): {
   }
 }
 
+function resolveGeminiApiKey(env: AppEnv): string | null {
+  const explicitGeminiKey = env.GEMINI_API_KEY?.trim();
+  if (explicitGeminiKey) {
+    return explicitGeminiKey;
+  }
+
+  const genericGoogleKey = env.GOOGLE_API_KEY?.trim();
+  if (genericGoogleKey) {
+    return genericGoogleKey;
+  }
+
+  return null;
+}
+
 export async function runOrchestratorSynthesis(
   input: OrchestratorInput,
   env: AppEnv
@@ -135,8 +150,9 @@ export async function runOrchestratorSynthesis(
     return buildHeuristicFallback(input, "ENABLE_LLM_ORCHESTRATOR is false");
   }
 
-  if (!env.OPENAI_API_KEY) {
-    return buildHeuristicFallback(input, "OPENAI_API_KEY is missing");
+  const geminiApiKey = resolveGeminiApiKey(env);
+  if (!geminiApiKey) {
+    return buildHeuristicFallback(input, "GEMINI_API_KEY (or GOOGLE_API_KEY) is missing");
   }
 
   const controller = new AbortController();
@@ -147,55 +163,34 @@ export async function runOrchestratorSynthesis(
 
   try {
     const prompt = buildOrchestratorPrompt(input);
+    const ai = new GoogleGenAI({ apiKey: geminiApiKey });
 
-    const response = await fetch(`${env.OPENAI_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: env.OPENAI_MODEL,
+    const response = await ai.models.generateContent({
+      model: env.GEMINI_MODEL,
+      contents: prompt,
+      config: {
+        systemInstruction:
+          "You are a rigorous digital forensics analyst. Output valid JSON only.",
         temperature: 0.2,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a rigorous digital forensics analyst. Output valid JSON only.",
-          },
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-      }),
-      signal: controller.signal,
+        responseMimeType: "application/json",
+        abortSignal: controller.signal,
+      },
     });
 
-    if (!response.ok) {
-      return buildHeuristicFallback(
-        input,
-        `OpenAI request failed with status ${response.status}`
-      );
-    }
-
-    const payload = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string | null } }>;
-    };
-    const content = payload.choices?.[0]?.message?.content ?? "";
+    const content = response.text?.trim() ?? "";
     if (!content) {
-      return buildHeuristicFallback(input, "OpenAI response content was empty");
+      return buildHeuristicFallback(input, "Gemini response content was empty");
     }
 
     const parsed = parseJsonContent(content);
     if (!parsed) {
-      return buildHeuristicFallback(input, "OpenAI JSON parse failed");
+      return buildHeuristicFallback(input, "Gemini JSON parse failed");
     }
 
     return {
       mode: "llm",
-      provider: "openai",
-      model: env.OPENAI_MODEL,
+      provider: "gemini",
+      model: env.GEMINI_MODEL,
       reportText: parsed.reportText,
       riskSignals: parsed.riskSignals,
       recommendedVerdict: parsed.recommendedVerdict,

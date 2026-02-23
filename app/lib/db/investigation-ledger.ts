@@ -40,12 +40,20 @@ const agentResultSchema = z.object({
 
 const trustScoreBreakdownSchema = z.object({
   scoringModel: z.literal(SCORING_MODEL_VERSION),
+  calibrationMode: z.enum(["balanced", "strict"]).optional(),
   maxPenaltyPerAgent: z.number(),
   weights: z.object({
     "exif-bot": z.number(),
     "noise-bot": z.number(),
     "dwt-svd-bot": z.number(),
   }),
+  penaltyScales: z
+    .object({
+      "exif-bot": z.number(),
+      "noise-bot": z.number(),
+      "dwt-svd-bot": z.number(),
+    })
+    .optional(),
   thresholds: z.object({
     verifiedMin: z.number(),
     suspiciousMin: z.number(),
@@ -68,7 +76,7 @@ const trustScoreBreakdownSchema = z.object({
 
 const orchestratorSynthesisSchema = z.object({
   mode: z.enum(["llm", "heuristic-fallback"]),
-  provider: z.enum(["openai", "internal"]),
+  provider: z.enum(["gemini", "openai", "internal"]),
   model: z.string(),
   reportText: z.string(),
   riskSignals: z.array(z.string()),

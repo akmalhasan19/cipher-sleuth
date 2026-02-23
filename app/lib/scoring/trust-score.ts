@@ -1,18 +1,21 @@
 import type { AgentResult } from "../agents/types";
 import {
-  SCORING_CONFIG,
   SCORING_MODEL_VERSION,
-  SCORING_THRESHOLDS,
-  SCORING_WEIGHTS,
+  getScoringConfig,
+  type ScoringCalibrationMode,
+  type ScoringThresholds,
+  type ScoringWeights,
 } from "./scoring-config";
 
 export type Verdict = "verified" | "suspicious" | "manipulated";
 
 export type TrustScoreBreakdown = {
   scoringModel: typeof SCORING_MODEL_VERSION;
+  calibrationMode: ScoringCalibrationMode;
   maxPenaltyPerAgent: number;
-  weights: typeof SCORING_WEIGHTS;
-  thresholds: typeof SCORING_THRESHOLDS;
+  weights: ScoringWeights;
+  thresholds: ScoringThresholds;
+  penaltyScales: ScoringWeights;
   perAgent: Array<{
     agentId: AgentResult["agentId"];
     rawPenalty: number;
@@ -27,19 +30,26 @@ export type TrustScoreBreakdown = {
   verdict: Verdict;
 };
 
-export function computeTrustScore(agentResults: AgentResult[]): TrustScoreBreakdown {
+export function computeTrustScore(
+  agentResults: AgentResult[],
+  calibrationMode: ScoringCalibrationMode = "balanced"
+): TrustScoreBreakdown {
+  const scoring = getScoringConfig(calibrationMode);
+
   const perAgent = agentResults.map((result) => {
     const rawPenalty = Math.max(0, -result.trustDelta);
+    const penaltyScale = scoring.penaltyScales[result.agentId] ?? 1;
+    const scaledPenalty = rawPenalty * penaltyScale;
     const normalizedPenalty = Math.min(
       1,
-      rawPenalty / SCORING_CONFIG.maxPenaltyPerAgent
+      scaledPenalty / scoring.maxPenaltyPerAgent
     );
-    const weight = SCORING_WEIGHTS[result.agentId] ?? 0;
+    const weight = scoring.weights[result.agentId] ?? 0;
     const weightedPenaltyContribution = normalizedPenalty * weight;
 
     return {
       agentId: result.agentId,
-      rawPenalty,
+      rawPenalty: Number(scaledPenalty.toFixed(4)),
       normalizedPenalty: Number(normalizedPenalty.toFixed(4)),
       weight,
       weightedPenaltyContribution: Number(weightedPenaltyContribution.toFixed(4)),
@@ -62,17 +72,19 @@ export function computeTrustScore(agentResults: AgentResult[]): TrustScoreBreakd
   );
 
   const verdict: Verdict =
-    finalTrustScore >= SCORING_THRESHOLDS.verifiedMin
+    finalTrustScore >= scoring.thresholds.verifiedMin
       ? "verified"
-      : finalTrustScore >= SCORING_THRESHOLDS.suspiciousMin
+      : finalTrustScore >= scoring.thresholds.suspiciousMin
       ? "suspicious"
       : "manipulated";
 
   return {
     scoringModel: SCORING_MODEL_VERSION,
-    maxPenaltyPerAgent: SCORING_CONFIG.maxPenaltyPerAgent,
-    weights: SCORING_WEIGHTS,
-    thresholds: SCORING_THRESHOLDS,
+    calibrationMode: scoring.mode,
+    maxPenaltyPerAgent: scoring.maxPenaltyPerAgent,
+    weights: scoring.weights,
+    thresholds: scoring.thresholds,
+    penaltyScales: scoring.penaltyScales,
     perAgent,
     scorePenaltyRaw,
     weightedPenaltyRatio,

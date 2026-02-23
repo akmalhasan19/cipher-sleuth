@@ -75,12 +75,12 @@ describe("Guest protection enforcement", () => {
     vi.stubEnv("ENABLE_GUEST_CAPTCHA", "false");
     vi.stubEnv("ENABLE_GUEST_IP_RATE_LIMIT", "false");
     vi.stubEnv("ENABLE_LLM_ORCHESTRATOR", "true");
-    vi.stubEnv("OPENAI_API_KEY", "fake-key");
+    vi.stubEnv("GEMINI_API_KEY", "fake-key");
 
     const orchestratorSpy = vi.fn(
       async (_input: unknown, env: { ENABLE_LLM_ORCHESTRATOR: "true" | "false" }) => ({
         mode: env.ENABLE_LLM_ORCHESTRATOR === "true" ? "llm" : "heuristic-fallback",
-        provider: env.ENABLE_LLM_ORCHESTRATOR === "true" ? "openai" : "internal",
+        provider: env.ENABLE_LLM_ORCHESTRATOR === "true" ? "gemini" : "internal",
         model: "mock-model",
         reportText: "mock report",
         riskSignals: ["mock risk"],

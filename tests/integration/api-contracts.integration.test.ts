@@ -88,6 +88,7 @@ const analyzeGetSchema = z.object({
     llmModel: z.string().min(1),
     maxUploadMb: z.number().int().positive(),
     guestFreeAnalysisLimit: z.number().int().min(1),
+    scoringCalibrationMode: z.enum(["balanced", "strict"]),
   }),
   sample: z.object({
     finalTrustScore: z.number().int().min(0).max(100),

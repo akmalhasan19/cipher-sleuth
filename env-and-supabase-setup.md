@@ -11,13 +11,13 @@ Copy `.env.example` to `.env`, then fill these values:
 - `GUEST_IP_HASH_SALT` (recommended random secret string)
 - `ENABLE_LLM_ORCHESTRATOR` (`true`/`false`)
 - `ENABLE_DUPLICATE_DETECTION` (`true`/`false`)
+- `SCORING_CALIBRATION_MODE` (`balanced`/`strict`, default `balanced`)
 - `ENABLE_GUEST_CAPTCHA` (`true`/`false`)
 - `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (required if guest captcha enabled)
 - `TURNSTILE_SECRET_KEY` (required if guest captcha enabled)
 - `ENABLE_GUEST_IP_RATE_LIMIT` (`true`/`false`)
-- `OPENAI_API_KEY` (optional if orchestrator enabled)
-- `OPENAI_MODEL` (default `gpt-4o-mini`)
-- `OPENAI_BASE_URL` (default `https://api.openai.com/v1`)
+- `GEMINI_API_KEY` (optional if orchestrator enabled)
+- `GEMINI_MODEL` (default `gemini-3-flash-preview`)
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `SUPABASE_STORAGE_BUCKET` (default `evidence-assets`)

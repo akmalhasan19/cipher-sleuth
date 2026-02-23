@@ -39,6 +39,7 @@ Lalu isi minimal ini di `.env`:
 - `SUPABASE_STORAGE_BUCKET` (default: `evidence-assets`)
 - `ENABLE_DUPLICATE_DETECTION=true`
 - `ENABLE_LLM_ORCHESTRATOR=false` (boleh tetap false saat testing dasar)
+- `SCORING_CALIBRATION_MODE=balanced` (ganti ke `strict` untuk mode lebih sensitif)
 - `MAX_UPLOAD_MB=5`
 - `ANALYZE_TIMEOUT_MS=45000`
 - `ENABLE_GUEST_IP_RATE_LIMIT=true`
@@ -52,8 +53,9 @@ Jika mau aktifkan captcha guest:
 - `TURNSTILE_SECRET_KEY=<your-secret-key>`
 
 Catatan:
-- Kalau mau test mode LLM, isi juga `OPENAI_API_KEY`.
-- Kalau tidak isi `OPENAI_API_KEY`, sistem akan fallback otomatis (itu normal).
+- Kalau mau test mode LLM, isi juga `GEMINI_API_KEY`.
+- Kalau tidak isi `GEMINI_API_KEY`, sistem akan fallback otomatis (itu normal).
+- Mode `strict` menaikkan sensitivitas fusion scoring (lebih mudah masuk `suspicious/manipulated`).
 
 ---
 

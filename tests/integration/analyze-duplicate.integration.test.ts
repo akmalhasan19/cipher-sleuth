@@ -16,7 +16,7 @@ type MockInvestigation = {
   trustScoreBreakdown: unknown;
   orchestrator: {
     mode: "llm" | "heuristic-fallback";
-    provider: "openai" | "internal";
+    provider: "gemini" | "openai" | "internal";
     model: string;
     reportText: string;
     riskSignals: string[];
@@ -50,7 +50,7 @@ vi.mock("@/app/lib/db/investigation-ledger", () => ({
     trustScoreBreakdown: unknown;
     orchestrator: {
       mode: "llm" | "heuristic-fallback";
-      provider: "openai" | "internal";
+      provider: "gemini" | "openai" | "internal";
       model: string;
       reportText: string;
       riskSignals: string[];

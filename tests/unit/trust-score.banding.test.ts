@@ -51,4 +51,14 @@ describe("computeTrustScore verdict banding", () => {
     expect(result.finalTrustScore).toBeLessThan(50);
     expect(result.verdict).toBe("manipulated");
   });
+
+  it("strict mode is more conservative than balanced mode", () => {
+    const agentResults = buildAgentResults(-8);
+    const balanced = computeTrustScore(agentResults, "balanced");
+    const strict = computeTrustScore(agentResults, "strict");
+
+    expect(strict.finalTrustScore).toBeLessThanOrEqual(balanced.finalTrustScore);
+    expect(strict.calibrationMode).toBe("strict");
+    expect(balanced.calibrationMode).toBe("balanced");
+  });
 });

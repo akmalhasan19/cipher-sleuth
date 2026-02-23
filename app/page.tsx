@@ -1,5 +1,5 @@
 import { HeroSection } from "./components/hero-section";
-import { InvestigationWorkspace } from "./components/investigation-workspace";
+import { ReviewsSection } from "./components/reviews-section";
 import { TopNavigation } from "./components/top-navigation";
 
 export default function HomePage() {
@@ -9,11 +9,11 @@ export default function HomePage() {
 
       <TopNavigation />
 
-      <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-10 px-4 pb-16 pt-5 md:px-8 md:pb-20">
+      <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-10 px-4 pb-4 pt-5 md:px-8 md:pb-6">
         <HeroSection />
-        <InvestigationWorkspace />
+        <ReviewsSection />
 
-        <footer className="rounded-2xl border-4 border-black bg-white px-5 py-4 shadow-[8px_8px_0_#000]">
+        <footer className="rounded-2xl border-4 border-black bg-white px-5 py-4 shadow-[4px_4px_0_#000] md:shadow-[8px_8px_0_#000]">
           <div className="flex flex-col items-center justify-between gap-3 text-sm font-semibold md:flex-row">
             <div className="flex flex-wrap justify-center gap-4">
               <a href="#" className="underline-offset-4 hover:underline">

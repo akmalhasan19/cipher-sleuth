@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { X } from "lucide-react";
 
-const navItems = ["Features", "Case Studies", "API", "Pricing"];
+const navItems = ["Features", "Case Studies"];
 
 export function TopNavigation() {
   const [isLoginOpen, setIsLoginOpen] = useState(false);

@@ -34,9 +34,13 @@ export async function callMlLabInference(params: {
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   const form = new FormData();
+  const fileBuffer = params.fileBytes.buffer.slice(
+    params.fileBytes.byteOffset,
+    params.fileBytes.byteOffset + params.fileBytes.byteLength
+  ) as ArrayBuffer;
   form.append(
     "file",
-    new Blob([params.fileBytes], { type: params.mimeType }),
+    new Blob([fileBuffer], { type: params.mimeType }),
     params.filename
   );
   form.append("returnHeatmap", String(Boolean(params.returnHeatmap)));

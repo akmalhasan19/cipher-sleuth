@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { runAllAgents } from "@/app/lib/agents/run-all-agents";
+import {
+  callMlLabInference,
+  type MlLabInferenceResponse,
+} from "@/app/lib/agents/ml-lab-client";
 import type { AgentResult } from "@/app/lib/agents/types";
 import { saveAnalysisRecord } from "@/app/lib/db/analysis-session-store";
 import { storeEvidenceAssetIfLoggedIn } from "@/app/lib/db/evidence-storage";
@@ -304,8 +308,82 @@ function extractElaVisualPayload(agentResults: AgentResult[]): ElaVisualPayload 
   };
 }
 
+type MlLabPayload = {
+  enabled: boolean;
+  status: "disabled" | "completed" | "failed";
+  modelVersion: string | null;
+  prediction: MlLabInferenceResponse["prediction"] | null;
+  scores: MlLabInferenceResponse["scores"] | null;
+  explainability: MlLabInferenceResponse["explainability"] | null;
+  timingMs: number | null;
+  error: string | null;
+};
+
+function isMlLabInferenceEnabled(rawEnabled: "true" | "false"): boolean {
+  if (process.env.NODE_ENV === "test") {
+    return false;
+  }
+  return rawEnabled === "true";
+}
+
+async function resolveMlLabInferencePayload(options: {
+  enabled: boolean;
+  baseUrl: string;
+  timeoutMs: number;
+  fileBytes: Uint8Array;
+  filename: string;
+  mimeType: string;
+}): Promise<MlLabPayload> {
+  if (!options.enabled) {
+    return {
+      enabled: false,
+      status: "disabled",
+      modelVersion: null,
+      prediction: null,
+      scores: null,
+      explainability: null,
+      timingMs: null,
+      error: null,
+    };
+  }
+
+  const response = await callMlLabInference({
+    fileBytes: options.fileBytes,
+    filename: options.filename,
+    mimeType: options.mimeType,
+    returnHeatmap: false,
+    baseUrl: options.baseUrl,
+    timeoutMs: options.timeoutMs,
+  });
+
+  if (!response.ok) {
+    return {
+      enabled: true,
+      status: "failed",
+      modelVersion: response.modelVersion ?? null,
+      prediction: null,
+      scores: null,
+      explainability: null,
+      timingMs: null,
+      error: response.error ?? "ML lab inference failed",
+    };
+  }
+
+  return {
+    enabled: true,
+    status: "completed",
+    modelVersion: response.modelVersion ?? null,
+    prediction: response.prediction ?? null,
+    scores: response.scores ?? null,
+    explainability: response.explainability ?? null,
+    timingMs: response.timingMs ?? null,
+    error: null,
+  };
+}
+
 export async function GET() {
   const env = getAppEnv();
+  const mlLabEnabled = isMlLabInferenceEnabled(env.ENABLE_ML_LAB_INFERENCE);
   const agentResults = sampleAgentResults();
   const scoringConfig = getScoringConfig(env.SCORING_CALIBRATION_MODE);
   const score = computeTrustScore(agentResults, env.SCORING_CALIBRATION_MODE);
@@ -347,6 +425,7 @@ export async function GET() {
       llmModel: env.GEMINI_MODEL,
       maxUploadMb: env.MAX_UPLOAD_MB,
       guestFreeAnalysisLimit: env.GUEST_FREE_ANALYSIS_LIMIT,
+      mlLabInferenceEnabled: mlLabEnabled,
       scoringCalibrationMode: env.SCORING_CALIBRATION_MODE,
       scoringConfig,
     },
@@ -362,6 +441,10 @@ export async function GET() {
       riskSignals: orchestration.riskSignals,
       recommendedVerdict: orchestration.recommendedVerdict,
       elaVisual: extractElaVisualPayload(agentResults),
+      mlLab: {
+        enabled: mlLabEnabled,
+        status: "disabled",
+      },
     },
   });
 }
@@ -465,6 +548,15 @@ export async function POST(request: Request) {
     const fileBytes = new Uint8Array(
       await parsedRequest.uploadedFile.arrayBuffer()
     );
+    const mlLabEnabled = isMlLabInferenceEnabled(env.ENABLE_ML_LAB_INFERENCE);
+    const mlLabInference = await resolveMlLabInferencePayload({
+      enabled: mlLabEnabled,
+      baseUrl: env.ML_LAB_INFERENCE_URL,
+      timeoutMs: Math.min(env.ML_LAB_INFERENCE_TIMEOUT_MS, 2500),
+      fileBytes,
+      filename: validatedUpload.filenameOriginal,
+      mimeType: validatedUpload.mimeType,
+    });
 
     const duplicateDetectionEnabled = env.ENABLE_DUPLICATE_DETECTION === "true";
     let duplicateLookupStatus = "skipped-disabled";
@@ -558,6 +650,7 @@ export async function POST(request: Request) {
           generatedAt,
           agentResults: lookup.investigation.agentResults,
           elaVisual: extractElaVisualPayload(lookup.investigation.agentResults),
+          mlLab: mlLabInference,
           storage: storageResult,
           access: buildAccessPayload(access, env.GUEST_FREE_ANALYSIS_LIMIT),
           database: {
@@ -592,7 +685,13 @@ export async function POST(request: Request) {
     });
     const score = computeTrustScore(
       agentResults,
-      env.SCORING_CALIBRATION_MODE
+      env.SCORING_CALIBRATION_MODE,
+      {
+        stage2FusionScore:
+          mlLabInference.status === "completed"
+            ? mlLabInference.scores?.fusionScore ?? null
+            : null,
+      }
     );
     const verdictLabel = toVerdictLabel(score.verdict);
     const deterministicSummary = buildReportSummary(
@@ -705,6 +804,7 @@ export async function POST(request: Request) {
       generatedAt,
       agentResults,
       elaVisual: extractElaVisualPayload(agentResults),
+      mlLab: mlLabInference,
       storage: storageResult,
       access: buildAccessPayload(access, env.GUEST_FREE_ANALYSIS_LIMIT),
       database: {

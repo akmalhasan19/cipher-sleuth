@@ -61,4 +61,34 @@ describe("computeTrustScore verdict banding", () => {
     expect(strict.calibrationMode).toBe("strict");
     expect(balanced.calibrationMode).toBe("balanced");
   });
+
+  it("maps stage-2 fusion score into trust scoring", () => {
+    const agentResults = buildAgentResults(-2);
+    const base = computeTrustScore(agentResults, "balanced");
+    const lowFusion = computeTrustScore(agentResults, "balanced", {
+      stage2FusionScore: 0,
+    });
+    const highFusion = computeTrustScore(agentResults, "balanced", {
+      stage2FusionScore: 1,
+    });
+
+    expect(lowFusion.stage2Fusion.enabled).toBe(true);
+    expect(highFusion.stage2Fusion.enabled).toBe(true);
+    expect(lowFusion.finalTrustScore).toBeGreaterThan(base.finalTrustScore);
+    expect(highFusion.finalTrustScore).toBeLessThan(base.finalTrustScore);
+    expect(base.verdict).toBe("verified");
+    expect(highFusion.verdict).toBe("suspicious");
+  });
+
+  it("ignores invalid stage-2 fusion score inputs", () => {
+    const agentResults = buildAgentResults(-8);
+    const base = computeTrustScore(agentResults, "balanced");
+    const invalid = computeTrustScore(agentResults, "balanced", {
+      stage2FusionScore: Number.NaN,
+    });
+
+    expect(invalid.finalTrustScore).toBe(base.finalTrustScore);
+    expect(invalid.verdict).toBe(base.verdict);
+    expect(invalid.stage2Fusion.enabled).toBe(false);
+  });
 });

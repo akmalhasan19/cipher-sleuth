@@ -17,6 +17,7 @@ export type ScoringCalibrationPreset = {
   weights: ScoringWeights;
   thresholds: ScoringThresholds;
   penaltyScales: ScoringWeights;
+  stage2FusionWeight: number;
 };
 
 export const SCORING_CALIBRATION_TABLE: Record<
@@ -41,6 +42,7 @@ export const SCORING_CALIBRATION_TABLE: Record<
       "noise-bot": 1,
       "dwt-svd-bot": 1,
     },
+    stage2FusionWeight: 0.25,
   },
   strict: {
     mode: "strict",
@@ -60,6 +62,7 @@ export const SCORING_CALIBRATION_TABLE: Record<
       "noise-bot": 1.2,
       "dwt-svd-bot": 1.15,
     },
+    stage2FusionWeight: 0.35,
   },
 };
 

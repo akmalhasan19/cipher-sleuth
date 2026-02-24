@@ -16,6 +16,7 @@ export type TrustScoreBreakdown = {
   weights: ScoringWeights;
   thresholds: ScoringThresholds;
   penaltyScales: ScoringWeights;
+  stage2FusionWeight: number;
   perAgent: Array<{
     agentId: AgentResult["agentId"];
     rawPenalty: number;
@@ -24,15 +25,32 @@ export type TrustScoreBreakdown = {
     weightedPenaltyContribution: number;
   }>;
   scorePenaltyRaw: number;
+  weightedPenaltyRatioBase: number;
   weightedPenaltyRatio: number;
   weightedPenaltyScore: number;
+  stage2Fusion:
+    | {
+        enabled: true;
+        fusionScore: number;
+        normalizedPenalty: number;
+        weight: number;
+        weightedPenaltyContribution: number;
+      }
+    | {
+        enabled: false;
+      };
   finalTrustScore: number;
   verdict: Verdict;
 };
 
+type ComputeTrustScoreOptions = {
+  stage2FusionScore?: number | null;
+};
+
 export function computeTrustScore(
   agentResults: AgentResult[],
-  calibrationMode: ScoringCalibrationMode = "balanced"
+  calibrationMode: ScoringCalibrationMode = "balanced",
+  options: ComputeTrustScoreOptions = {}
 ): TrustScoreBreakdown {
   const scoring = getScoringConfig(calibrationMode);
 
@@ -60,11 +78,29 @@ export function computeTrustScore(
     (total, item) => total + item.rawPenalty,
     0
   );
-  const weightedPenaltyRatio = Number(
+  const weightedPenaltyRatioBase = Number(
     perAgent
       .reduce((total, item) => total + item.weightedPenaltyContribution, 0)
       .toFixed(4)
   );
+
+  const stage2FusionWeight = Math.max(0, Math.min(1, scoring.stage2FusionWeight));
+  const stage2FusionScoreRaw = options.stage2FusionScore;
+  const stage2FusionScore =
+    typeof stage2FusionScoreRaw === "number" &&
+    Number.isFinite(stage2FusionScoreRaw)
+      ? Math.max(0, Math.min(1, stage2FusionScoreRaw))
+      : null;
+
+  const weightedPenaltyRatio =
+    stage2FusionScore === null
+      ? weightedPenaltyRatioBase
+      : Number(
+          (
+            weightedPenaltyRatioBase * (1 - stage2FusionWeight) +
+            stage2FusionScore * stage2FusionWeight
+          ).toFixed(4)
+        );
   const weightedPenaltyScore = Number((weightedPenaltyRatio * 100).toFixed(2));
   const finalTrustScore = Math.max(
     0,
@@ -85,10 +121,26 @@ export function computeTrustScore(
     weights: scoring.weights,
     thresholds: scoring.thresholds,
     penaltyScales: scoring.penaltyScales,
+    stage2FusionWeight,
     perAgent,
     scorePenaltyRaw,
+    weightedPenaltyRatioBase,
     weightedPenaltyRatio,
     weightedPenaltyScore,
+    stage2Fusion:
+      stage2FusionScore === null
+        ? {
+            enabled: false,
+          }
+        : {
+            enabled: true,
+            fusionScore: Number(stage2FusionScore.toFixed(4)),
+            normalizedPenalty: Number(stage2FusionScore.toFixed(4)),
+            weight: stage2FusionWeight,
+            weightedPenaltyContribution: Number(
+              (stage2FusionScore * stage2FusionWeight).toFixed(4)
+            ),
+          },
     finalTrustScore,
     verdict,
   };

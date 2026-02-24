@@ -1,0 +1,7 @@
+artifacts/
+data/raw/
+data/processed/
+data/splits/
+__pycache__/
+.pytest_cache/
+.venv/

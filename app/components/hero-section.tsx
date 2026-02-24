@@ -51,6 +51,22 @@ type AnalysisResult = {
     originalPreviewDataUrl: string | null;
     residualPreviewDataUrl: string | null;
   } | null;
+  mlLab?: {
+    enabled: boolean;
+    status: "disabled" | "completed" | "failed";
+    modelVersion: string | null;
+    prediction: {
+      label: "authentic" | "manipulated";
+      probability: number;
+      confidence: number;
+    } | null;
+    scores: {
+      elaScore: number;
+      dwtsvdScore: number;
+      fusionScore: number;
+    } | null;
+    error: string | null;
+  } | null;
   agentResults: {
     agentName: string;
     status: string;
@@ -363,6 +379,7 @@ export function HeroSection() {
         fileHashSha256: data.fileHashSha256,
         generatedAt: data.generatedAt,
         elaVisual: data.elaVisual ?? null,
+        mlLab: data.mlLab ?? null,
         agentResults: data.agentResults,
       });
     } catch (error) {
@@ -515,6 +532,38 @@ export function HeroSection() {
             <p className="mt-1 text-[11px] font-mono text-[#33473d]">
               Generated: {new Date(analysisResult.generatedAt).toLocaleString()}
             </p>
+            {analysisResult.mlLab?.enabled ? (
+              <div className="mt-3 rounded-xl border-2 border-black bg-[#e9f2ff] p-3">
+                <p className="text-[11px] font-bold uppercase text-[#1d2a24]">
+                  ML Stage-2 Live
+                </p>
+                {analysisResult.mlLab.status === "completed" &&
+                analysisResult.mlLab.prediction &&
+                analysisResult.mlLab.scores ? (
+                  <div className="mt-2 space-y-1 text-[11px] font-mono text-[#22364a]">
+                    <p>Model: {analysisResult.mlLab.modelVersion ?? "unknown"}</p>
+                    <p>
+                      Pred: {analysisResult.mlLab.prediction.label} | prob=
+                      {analysisResult.mlLab.prediction.probability.toFixed(4)} | conf=
+                      {analysisResult.mlLab.prediction.confidence.toFixed(4)}
+                    </p>
+                    <p>
+                      Scores: ela={analysisResult.mlLab.scores.elaScore.toFixed(4)} |
+                      dwt-svd={analysisResult.mlLab.scores.dwtsvdScore.toFixed(4)} |
+                      fusion={analysisResult.mlLab.scores.fusionScore.toFixed(4)}
+                    </p>
+                  </div>
+                ) : analysisResult.mlLab.status === "failed" ? (
+                  <p className="mt-2 text-[11px] font-medium text-[#7a1f1f]">
+                    ML service error: {analysisResult.mlLab.error ?? "unknown error"}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-[11px] font-medium text-[#33473d]">
+                    ML stage-2 inference disabled.
+                  </p>
+                )}
+              </div>
+            ) : null}
             {analysisResult.elaVisual?.available &&
             analysisResult.elaVisual.originalPreviewDataUrl &&
             analysisResult.elaVisual.residualPreviewDataUrl ? (

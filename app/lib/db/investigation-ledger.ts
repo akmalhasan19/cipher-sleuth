@@ -58,6 +58,7 @@ const trustScoreBreakdownSchema = z.object({
     verifiedMin: z.number(),
     suspiciousMin: z.number(),
   }),
+  stage2FusionWeight: z.number().optional(),
   perAgent: z.array(
     z.object({
       agentId: z.enum(["exif-bot", "noise-bot", "dwt-svd-bot"]),
@@ -68,8 +69,18 @@ const trustScoreBreakdownSchema = z.object({
     })
   ),
   scorePenaltyRaw: z.number(),
+  weightedPenaltyRatioBase: z.number().optional(),
   weightedPenaltyRatio: z.number(),
   weightedPenaltyScore: z.number(),
+  stage2Fusion: z
+    .object({
+      enabled: z.boolean(),
+      fusionScore: z.number().optional(),
+      normalizedPenalty: z.number().optional(),
+      weight: z.number().optional(),
+      weightedPenaltyContribution: z.number().optional(),
+    })
+    .optional(),
   finalTrustScore: z.number(),
   verdict: verdictSchema,
 });

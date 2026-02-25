@@ -1,0 +1,17 @@
+
+> cipher-sleuth@0.1.0 dev
+> next dev -p 3000
+
+▲ Next.js 16.1.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.18.6:3000
+- Environments: .env
+
+✓ Starting...
+✓ Ready in 2.7s
+○ Compiling /api/analyze ...
+ POST /api/analyze 200 in 3.9s (compile: 16ms, render: 3.8s)
+ GET /api/report/analysis_1772020938555_8bccb109/pdf 200 in 2.4s (compile: 2.2s, render: 228ms)
+[?25h
+
+C:\Users\user\cipher-sleuth>

@@ -52,8 +52,12 @@ Alias folder class yang didukung:
 cd ml-lab
 python -m venv .venv
 .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements.train.txt
 ```
+
+Catatan deployment:
+- `requirements.txt` dipakai untuk runtime inferensi (lean, cocok untuk Vercel limit).
+- `requirements.train.txt` dipakai untuk eksperimen/training/evaluasi lengkap.
 
 ## Menjalankan Pipeline End-to-End
 

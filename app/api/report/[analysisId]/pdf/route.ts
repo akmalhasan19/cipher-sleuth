@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { getAnalysisRecord } from "@/app/lib/db/analysis-session-store";
+import {
+  findPersistedAnalysisRecord,
+  getAnalysisRecord,
+  saveAnalysisRecord,
+} from "@/app/lib/db/analysis-session-store";
 import { generateForensicReportPdf } from "@/app/lib/report/generate-report-pdf";
 import { readCookie } from "@/app/lib/validation/http-cookies";
 
@@ -11,11 +15,22 @@ export const runtime = "nodejs";
 
 export async function GET(request: Request, { params }: RouteParams) {
   const { analysisId } = await params;
-  const record = getAnalysisRecord(analysisId);
+  let record = getAnalysisRecord(analysisId);
+
+  if (!record) {
+    const persisted = await findPersistedAnalysisRecord(analysisId);
+    if (persisted.status === "found" && persisted.record) {
+      record = persisted.record;
+      saveAnalysisRecord(record);
+    }
+  }
 
   if (!record) {
     return NextResponse.json(
-      { ok: false, error: "Report not found or expired." },
+      {
+        ok: false,
+        error: "Report not found. Please run analysis again.",
+      },
       { status: 404 }
     );
   }

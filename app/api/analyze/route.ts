@@ -6,7 +6,10 @@ import {
   type MlLabInferenceResponse,
 } from "@/app/lib/agents/ml-lab-client";
 import type { AgentResult } from "@/app/lib/agents/types";
-import { saveAnalysisRecord } from "@/app/lib/db/analysis-session-store";
+import {
+  persistAnalysisRecord,
+  saveAnalysisRecord,
+} from "@/app/lib/db/analysis-session-store";
 import { storeEvidenceAssetIfLoggedIn } from "@/app/lib/db/evidence-storage";
 import { consumeGuestIpDailyLimit } from "@/app/lib/db/guest-ip-rate-limit";
 import {
@@ -620,6 +623,21 @@ export async function POST(request: Request) {
           reportText: downloadableReport,
           agentResults: lookup.investigation.agentResults,
         });
+        const analysisSessionPersist = await persistAnalysisRecord({
+          analysisId,
+          ownerUserId: access.userId,
+          ownerGuestId: access.isLoggedIn ? null : access.guestId,
+          filenameOriginal: validatedUpload.filenameOriginal,
+          filenameNormalized: validatedUpload.filenameNormalized,
+          fileHashSha256: validatedUpload.fileHashSha256,
+          finalTrustScore: lookup.investigation.finalTrustScore,
+          verdict: lookup.investigation.verdict,
+          forensicBreakdown,
+          trustScoreBreakdown: lookup.investigation.trustScoreBreakdown,
+          generatedAt,
+          reportText: downloadableReport,
+          agentResults: lookup.investigation.agentResults,
+        });
 
         const response = NextResponse.json({
           ok: true,
@@ -662,6 +680,10 @@ export async function POST(request: Request) {
             persist: {
               status: "skipped-cache-hit",
               errorMessage: null,
+            },
+            analysisSession: {
+              status: analysisSessionPersist.status,
+              errorMessage: analysisSessionPersist.errorMessage,
             },
           },
           guestProtection,
@@ -760,6 +782,21 @@ export async function POST(request: Request) {
       reportText: downloadableReport,
       agentResults,
     });
+    const analysisSessionPersist = await persistAnalysisRecord({
+      analysisId,
+      ownerUserId: access.userId,
+      ownerGuestId: access.isLoggedIn ? null : access.guestId,
+      filenameOriginal: validatedUpload.filenameOriginal,
+      filenameNormalized: validatedUpload.filenameNormalized,
+      fileHashSha256: validatedUpload.fileHashSha256,
+      finalTrustScore: score.finalTrustScore,
+      verdict: score.verdict,
+      forensicBreakdown,
+      trustScoreBreakdown: score,
+      generatedAt,
+      reportText: downloadableReport,
+      agentResults,
+    });
 
     const persistResult = await persistInvestigation({
       fileHashSha256: validatedUpload.fileHashSha256,
@@ -816,6 +853,10 @@ export async function POST(request: Request) {
         persist: {
           status: persistResult.status,
           errorMessage: persistResult.errorMessage,
+        },
+        analysisSession: {
+          status: analysisSessionPersist.status,
+          errorMessage: analysisSessionPersist.errorMessage,
         },
       },
       guestProtection,

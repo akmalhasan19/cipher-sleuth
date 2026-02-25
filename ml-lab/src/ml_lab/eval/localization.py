@@ -76,7 +76,7 @@ def run_localization_suite(test_manifest: pd.DataFrame, config: dict[str, Any]) 
             ]:
                 pred_map = pred_map.astype(np.float32)
                 pred_map = (pred_map - float(pred_map.min())) / (float(pred_map.max() - pred_map.min()) + 1e-6)
-                metrics = compute_localization_metrics(pred_map=pred_map, gt_mask=mask_gt, threshold=0.5)
+                metrics = compute_localization_metrics(pred_mask=pred_map, gt_mask=mask_gt, threshold=0.5)
                 per_method_rows.append(
                     {
                         "image_path": row.image_path,

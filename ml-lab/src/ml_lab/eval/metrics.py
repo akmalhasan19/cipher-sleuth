@@ -76,3 +76,34 @@ def bootstrap_metric_ci(
         "ci_lower": lower,
         "ci_upper": upper,
     }
+
+
+def compute_localization_metrics(
+    pred_mask: np.ndarray,
+    gt_mask: np.ndarray,
+    threshold: float = 0.5,
+) -> dict[str, float]:
+    if pred_mask.shape != gt_mask.shape:
+        raise ValueError("pred_mask and gt_mask must have the same shape")
+
+    pred_bin = (pred_mask >= threshold).astype(np.uint8)
+    gt_bin = (gt_mask >= 0.5).astype(np.uint8)
+
+    intersection = float(np.logical_and(pred_bin == 1, gt_bin == 1).sum())
+    union = float(np.logical_or(pred_bin == 1, gt_bin == 1).sum())
+    pred_sum = float(pred_bin.sum())
+    gt_sum = float(gt_bin.sum())
+
+    iou = intersection / union if union > 0 else 0.0
+    dice = (2.0 * intersection) / (pred_sum + gt_sum) if (pred_sum + gt_sum) > 0 else 0.0
+    precision = intersection / pred_sum if pred_sum > 0 else 0.0
+    recall = intersection / gt_sum if gt_sum > 0 else 0.0
+    pixel_f1 = (2.0 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+
+    return {
+        "iou": float(iou),
+        "dice": float(dice),
+        "pixel_f1": float(pixel_f1),
+        "pixel_precision": float(precision),
+        "pixel_recall": float(recall),
+    }

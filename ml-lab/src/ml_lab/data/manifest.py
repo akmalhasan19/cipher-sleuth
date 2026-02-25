@@ -28,7 +28,43 @@ CLASS_ALIASES: Dict[str, int] = {
 IGNORED_DIR_PARTS = {
     "casia 2 groundtruth",
     "groundtruth",
+    "mask",
+    "masks",
+    "gt",
 }
+MASK_DIR_PARTS = {
+    "casia 2 groundtruth",
+    "groundtruth",
+    "mask",
+    "masks",
+    "gt",
+}
+
+
+def _normalize_mask_key(stem: str) -> str:
+    return (
+        stem.lower()
+        .replace("_gt", "")
+        .replace("_mask", "")
+        .replace("-gt", "")
+        .replace("-mask", "")
+        .strip()
+    )
+
+
+def _index_mask_candidates(dataset_root: Path) -> dict[str, str]:
+    index: dict[str, str] = {}
+    for path in dataset_root.rglob("*"):
+        if not path.is_file() or path.suffix.lower() not in IMAGE_EXTENSIONS:
+            continue
+        parts = {part.lower() for part in path.parts}
+        if not parts.intersection(MASK_DIR_PARTS):
+            continue
+
+        key = _normalize_mask_key(path.stem)
+        if key and key not in index:
+            index[key] = str(path.resolve())
+    return index
 
 
 def _iter_image_paths(dataset_root: Path) -> Iterable[Path]:
@@ -73,15 +109,21 @@ def build_manifest(dataset_root: str | Path, source_dataset: str, perturbation_t
     if not root.exists():
         raise FileNotFoundError(f"Dataset root not found: {root}")
 
+    mask_index = _index_mask_candidates(root)
     rows: List[Dict[str, object]] = []
     for path in _iter_image_paths(root):
         try:
             label = _infer_label_from_path(path, root)
             width, height, image_format = _image_meta(path)
+            mask_path: str | None = None
+            if label == 1:
+                mask_key = _normalize_mask_key(path.stem)
+                mask_path = mask_index.get(mask_key)
             rows.append(
                 {
                     "image_path": str(path.resolve()),
                     "label": int(label),
+                    "mask_path": mask_path,
                     "source_dataset": source_dataset,
                     "split": "unspecified",
                     "perturbation_tag": perturbation_tag,
@@ -126,6 +168,7 @@ def get_data_card_summary(manifest: pd.DataFrame) -> Dict[str, object]:
         "height_max": int(manifest["height"].max()),
     }
     duplicate_md5 = int(manifest["file_md5"].duplicated().sum())
+    mask_available_count = int(manifest.get("mask_path", pd.Series(dtype=object)).fillna("").astype(str).str.len().gt(0).sum())
 
     return {
         "num_images": int(len(manifest)),
@@ -133,4 +176,5 @@ def get_data_card_summary(manifest: pd.DataFrame) -> Dict[str, object]:
         "format_distribution": {str(k): int(v) for k, v in format_counts.items()},
         "resolution_summary": resolution_summary,
         "exact_duplicate_count": duplicate_md5,
+        "mask_available_count": mask_available_count,
     }

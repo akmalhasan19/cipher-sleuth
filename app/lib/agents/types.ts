@@ -1,6 +1,12 @@
 import type { ForensicSignalSnapshot } from "./forensic-signals";
 
-export type AgentId = "exif-bot" | "noise-bot" | "dwt-svd-bot";
+export type AgentId =
+  | "exif-bot"
+  | "noise-bot"
+  | "dwt-svd-bot"
+  | "cfa-bot"
+  | "mantra-bot"
+  | "prnu-bot";
 
 export type AgentResult = {
   agentId: AgentId;

@@ -57,3 +57,23 @@ def save_split_table(split_manifest: pd.DataFrame, output_csv: str | Path) -> No
     path = Path(output_csv)
     path.parent.mkdir(parents=True, exist_ok=True)
     split_manifest.to_csv(path, index=False)
+
+
+def validate_no_split_leakage(split_manifest: pd.DataFrame) -> dict[str, int]:
+    required = {"file_md5", "split", "label"}
+    if not required.issubset(split_manifest.columns):
+        raise ValueError("split_manifest must contain file_md5, split, and label")
+
+    md5_split_counts = split_manifest.groupby("file_md5")["split"].nunique()
+    duplicate_split_md5 = int((md5_split_counts > 1).sum())
+    label_conflicts = int(split_manifest.groupby("file_md5")["label"].nunique().gt(1).sum())
+
+    if duplicate_split_md5 > 0:
+        raise RuntimeError(f"Data leakage detected: {duplicate_split_md5} file_md5 values appear in multiple splits")
+    if label_conflicts > 0:
+        raise RuntimeError(f"Label conflict detected: {label_conflicts} file_md5 values map to multiple labels")
+
+    return {
+        "duplicate_split_md5": duplicate_split_md5,
+        "label_conflicts": label_conflicts,
+    }

@@ -31,7 +31,14 @@ const analyzePostSuccessSchema = z.object({
   generatedAt: z.string().min(1),
   agentResults: z.array(
     z.object({
-      agentId: z.enum(["exif-bot", "noise-bot", "dwt-svd-bot"]),
+      agentId: z.enum([
+        "exif-bot",
+        "noise-bot",
+        "dwt-svd-bot",
+        "cfa-bot",
+        "mantra-bot",
+        "prnu-bot",
+      ]),
       status: z.literal("completed"),
       elapsedMs: z.number().int().nonnegative(),
       confidence: z.number(),

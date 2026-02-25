@@ -18,6 +18,7 @@ def write_markdown_report(
     summary_df: pd.DataFrame,
     bootstrap_df: pd.DataFrame,
     robustness_df: pd.DataFrame,
+    localization_df: pd.DataFrame,
     stats_df: pd.DataFrame,
     error_df: pd.DataFrame,
     assumptions: list[str],
@@ -40,6 +41,9 @@ def write_markdown_report(
     lines.append("")
     lines.append("## Robustness Metrics")
     lines.append(_to_markdown_table(robustness_df))
+    lines.append("")
+    lines.append("## Localization Metrics")
+    lines.append(_to_markdown_table(localization_df))
     lines.append("")
     lines.append("## Statistical Comparison")
     lines.append(_to_markdown_table(stats_df))

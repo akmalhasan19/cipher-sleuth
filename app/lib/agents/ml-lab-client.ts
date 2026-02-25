@@ -11,10 +11,16 @@ export type MlLabInferenceResponse = {
     elaScore: number;
     dwtsvdScore: number;
     fusionScore: number;
+    cfaScore?: number;
+    mantraScore?: number;
+    prnuScore?: number;
   };
   explainability?: {
     topSignals: string[];
     elaHeatmapBase64: string | null;
+    cfaMapBase64?: string | null;
+    mantraMaskBase64?: string | null;
+    prnuResidualBase64?: string | null;
   };
   timingMs?: number;
   error?: string;

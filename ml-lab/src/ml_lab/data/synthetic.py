@@ -26,9 +26,10 @@ def _base_image(rng: np.random.Generator, image_size: tuple[int, int]) -> np.nda
     return image
 
 
-def _tamper(image: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+def _tamper_with_mask(image: np.ndarray, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
     tampered = image.copy()
     height, width, _ = tampered.shape
+    mask = np.zeros((height, width), dtype=np.uint8)
 
     patch_w = int(rng.integers(max(24, width // 10), max(28, width // 5)))
     patch_h = int(rng.integers(max(24, height // 10), max(28, height // 5)))
@@ -46,6 +47,7 @@ def _tamper(image: np.ndarray, rng: np.random.Generator) -> np.ndarray:
         patch = np.clip(patch.astype(np.float32) * alpha, 0, 255).astype(np.uint8)
 
     tampered[ty : ty + patch_h, tx : tx + patch_w] = patch
+    mask[ty : ty + patch_h, tx : tx + patch_w] = 255
     cv2.rectangle(
         tampered,
         (tx, ty),
@@ -53,6 +55,18 @@ def _tamper(image: np.ndarray, rng: np.random.Generator) -> np.ndarray:
         color=tuple(int(x) for x in rng.integers(10, 245, size=3)),
         thickness=max(1, int(min(height, width) * 0.008)),
     )
+    if rng.random() > 0.5:
+        radius = int(rng.integers(max(6, width // 28), max(10, width // 16)))
+        cx = int(rng.integers(radius, width - radius))
+        cy = int(rng.integers(radius, height - radius))
+        color = tuple(int(x) for x in rng.integers(10, 245, size=3))
+        cv2.circle(tampered, (cx, cy), radius, color, thickness=-1)
+        cv2.circle(mask, (cx, cy), radius, 255, thickness=-1)
+    return tampered, mask
+
+
+def _tamper(image: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    tampered, _ = _tamper_with_mask(image, rng)
     return tampered
 
 
@@ -66,8 +80,10 @@ def generate_synthetic_dataset(
     root = Path(output_root)
     authentic_dir = root / "authentic"
     tampered_dir = root / "tampered"
+    mask_dir = root / "groundtruth"
     authentic_dir.mkdir(parents=True, exist_ok=True)
     tampered_dir.mkdir(parents=True, exist_ok=True)
+    mask_dir.mkdir(parents=True, exist_ok=True)
 
     rng = np.random.default_rng(seed)
     for idx in range(num_authentic):
@@ -76,5 +92,22 @@ def generate_synthetic_dataset(
 
     for idx in range(num_tampered):
         img = _base_image(rng, image_size)
-        forged = _tamper(img, rng)
+        forged, mask = _tamper_with_mask(img, rng)
         cv2.imwrite(str(tampered_dir / f"tampered_{idx:04d}.jpg"), cv2.cvtColor(forged, cv2.COLOR_RGB2BGR))
+        cv2.imwrite(str(mask_dir / f"tampered_{idx:04d}.png"), mask)
+
+
+def generate_synthetic_splicing_dataset(
+    output_root: str | Path,
+    num_authentic: int = 240,
+    num_tampered: int = 240,
+    image_size: tuple[int, int] = (256, 256),
+    seed: int = 42,
+) -> None:
+    generate_synthetic_dataset(
+        output_root=output_root,
+        num_authentic=num_authentic,
+        num_tampered=num_tampered,
+        image_size=image_size,
+        seed=seed,
+    )

@@ -4,8 +4,8 @@ from .manifest import (
     load_manifest,
     save_manifest,
 )
-from .split import build_split_table, save_split_table
-from .synthetic import generate_synthetic_dataset
+from .split import build_split_table, save_split_table, validate_no_split_leakage
+from .synthetic import generate_synthetic_dataset, generate_synthetic_splicing_dataset
 
 __all__ = [
     "build_manifest",
@@ -14,5 +14,7 @@ __all__ = [
     "save_manifest",
     "build_split_table",
     "save_split_table",
+    "validate_no_split_leakage",
     "generate_synthetic_dataset",
+    "generate_synthetic_splicing_dataset",
 ]

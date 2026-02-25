@@ -10,10 +10,12 @@ import pandas as pd
 from PIL import Image
 
 from ml_lab.eval.metrics import compute_binary_metrics
+from ml_lab.features.cfa import compute_cfa_features
 from ml_lab.features.dwt_svd import compute_dwt_svd_features
 from ml_lab.features.ela import compute_ela_features
 from ml_lab.features.image_ops import load_rgb_image
-from ml_lab.models.methods import get_method_feature_columns
+from ml_lab.features.mantra import compute_mantra_features
+from ml_lab.features.prnu import compute_prnu_features
 
 LOGGER = logging.getLogger(__name__)
 
@@ -99,6 +101,9 @@ def run_robustness_suite(
     image_size = tuple(config["experiment"]["image_size"])
     ela_cfg = config["features"]["ela"]
     dwt_cfg = config["features"]["dwt"]
+    cfa_cfg = config["features"].get("cfa", {})
+    prnu_cfg = config["features"].get("prnu", {})
+    mantra_cfg = config["features"].get("mantra", {})
     scenarios = config["robustness"]["scenarios"]
 
     rows: list[dict[str, Any]] = []
@@ -126,7 +131,31 @@ def run_robustness_suite(
                 level=int(dwt_cfg["level"]),
                 top_k_singular=int(dwt_cfg["top_k_singular"]),
             )
-            full_row = {**ela_features, **dwt_features}
+            cfa_features, _, _ = compute_cfa_features(
+                image_rgb=perturbed,
+                window_size=int(cfa_cfg.get("window_size", 7)),
+                variance_threshold=float(cfa_cfg.get("variance_threshold", 0.6)),
+                smooth_sigma=float(cfa_cfg.get("smooth_sigma", 1.0)),
+                with_map=False,
+            )
+            prnu_features, _, _ = compute_prnu_features(
+                image_rgb=perturbed,
+                wavelet=str(prnu_cfg.get("wavelet", "db4")),
+                level=int(prnu_cfg.get("level", 2)),
+                with_map=False,
+            )
+            mantra_features, _, _ = compute_mantra_features(
+                image_rgb=perturbed,
+                config=mantra_cfg,
+                with_mask=False,
+            )
+            full_row = {
+                **ela_features,
+                **dwt_features,
+                **cfa_features,
+                **prnu_features,
+                **mantra_features,
+            }
 
             for method, result in method_results.items():
                 cols = result.feature_columns

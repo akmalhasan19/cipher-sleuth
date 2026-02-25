@@ -64,6 +64,7 @@ def train_method(
             "image_path",
             "label",
             "split",
+            "mask_path",
             "source_dataset",
             "perturbation_tag",
         }

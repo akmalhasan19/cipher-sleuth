@@ -23,9 +23,17 @@ const INVESTIGATION_SELECT_COLUMNS = [
 ].join(",");
 
 const verdictSchema = z.enum(["verified", "suspicious", "manipulated"]);
+const agentIdSchema = z.enum([
+  "exif-bot",
+  "noise-bot",
+  "dwt-svd-bot",
+  "cfa-bot",
+  "mantra-bot",
+  "prnu-bot",
+]);
 
 const agentResultSchema = z.object({
-  agentId: z.enum(["exif-bot", "noise-bot", "dwt-svd-bot"]),
+  agentId: agentIdSchema,
   agentName: z.string(),
   status: z.literal("completed"),
   confidence: z.number(),
@@ -46,12 +54,18 @@ const trustScoreBreakdownSchema = z.object({
     "exif-bot": z.number(),
     "noise-bot": z.number(),
     "dwt-svd-bot": z.number(),
+    "cfa-bot": z.number().optional(),
+    "mantra-bot": z.number().optional(),
+    "prnu-bot": z.number().optional(),
   }),
   penaltyScales: z
     .object({
       "exif-bot": z.number(),
       "noise-bot": z.number(),
       "dwt-svd-bot": z.number(),
+      "cfa-bot": z.number().optional(),
+      "mantra-bot": z.number().optional(),
+      "prnu-bot": z.number().optional(),
     })
     .optional(),
   thresholds: z.object({
@@ -61,7 +75,7 @@ const trustScoreBreakdownSchema = z.object({
   stage2FusionWeight: z.number().optional(),
   perAgent: z.array(
     z.object({
-      agentId: z.enum(["exif-bot", "noise-bot", "dwt-svd-bot"]),
+      agentId: agentIdSchema,
       rawPenalty: z.number(),
       normalizedPenalty: z.number(),
       weight: z.number(),

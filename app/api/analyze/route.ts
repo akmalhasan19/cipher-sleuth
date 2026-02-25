@@ -322,6 +322,80 @@ type MlLabPayload = {
   error: string | null;
 };
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function scoreToTrustDelta(score: number, maxPenalty: number): number {
+  const bounded = clamp(score, 0, 1);
+  return -Math.round(bounded * maxPenalty);
+}
+
+function scoreToConfidence(score: number): number {
+  return Number(clamp(0.72 + score * 0.24, 0.72, 0.97).toFixed(3));
+}
+
+function buildMlLabAgentResults(mlLab: MlLabPayload): AgentResult[] {
+  if (mlLab.status !== "completed" || !mlLab.scores) {
+    return [];
+  }
+
+  const rows: Array<{
+    agentId: AgentResult["agentId"];
+    agentName: string;
+    score: number | undefined;
+    maxPenalty: number;
+    key: string;
+  }> = [
+    {
+      agentId: "cfa-bot",
+      agentName: "CFA Artifact Monitor",
+      score: mlLab.scores.cfaScore,
+      maxPenalty: 15,
+      key: "cfaScore",
+    },
+    {
+      agentId: "mantra-bot",
+      agentName: "ManTra Neural Splicing Detector",
+      score: mlLab.scores.mantraScore,
+      maxPenalty: 18,
+      key: "mantraScore",
+    },
+    {
+      agentId: "prnu-bot",
+      agentName: "PRNU Noise Fingerprint Analyst",
+      score: mlLab.scores.prnuScore,
+      maxPenalty: 12,
+      key: "prnuScore",
+    },
+  ];
+
+  return rows
+    .filter((item) => typeof item.score === "number")
+    .map((item) => {
+      const score = clamp(item.score ?? 0, 0, 1);
+      return {
+        agentId: item.agentId,
+        agentName: item.agentName,
+        status: "completed" as const,
+        confidence: scoreToConfidence(score),
+        trustDelta: scoreToTrustDelta(score, item.maxPenalty),
+        elapsedMs: Math.max(1, Math.round((mlLab.timingMs ?? 30) / 3)),
+        logs: [
+          `ML-Lab signal extracted via ${item.agentName}.`,
+          `${item.key}=${score.toFixed(4)}.`,
+          `Model version: ${mlLab.modelVersion ?? "unknown"}.`,
+        ],
+        rawResult: {
+          signal: item.key,
+          score: Number(score.toFixed(6)),
+          modelVersion: mlLab.modelVersion,
+          mlLabStatus: mlLab.status,
+        },
+      };
+    });
+}
+
 function isMlLabInferenceEnabled(rawEnabled: "true" | "false"): boolean {
   if (process.env.NODE_ENV === "test") {
     return false;
@@ -697,7 +771,7 @@ export async function POST(request: Request) {
     const analysisId = `analysis_${Date.now()}_${randomUUID().slice(0, 8)}`;
     const generatedAt = new Date().toISOString();
 
-    const agentResults = await runAllAgents({
+    const deterministicAgentResults = await runAllAgents({
       filenameOriginal: validatedUpload.filenameOriginal,
       filenameNormalized: validatedUpload.filenameNormalized,
       mimeType: validatedUpload.mimeType,
@@ -705,6 +779,8 @@ export async function POST(request: Request) {
       fileHashSha256: validatedUpload.fileHashSha256,
       fileBytes,
     });
+    const mlLabAgentResults = buildMlLabAgentResults(mlLabInference);
+    const agentResults = [...deterministicAgentResults, ...mlLabAgentResults];
     const score = computeTrustScore(
       agentResults,
       env.SCORING_CALIBRATION_MODE,

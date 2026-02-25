@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -13,14 +14,17 @@ from ml_lab.data import (
     build_manifest,
     build_split_table,
     generate_synthetic_dataset,
+    generate_synthetic_splicing_dataset,
     get_data_card_summary,
     load_manifest,
     save_manifest,
     save_split_table,
+    validate_no_split_leakage,
 )
 from ml_lab.eval import (
     bootstrap_metric_ci,
     build_error_analysis_table,
+    run_localization_suite,
     run_method_comparison_stats,
     run_robustness_suite,
     write_markdown_report,
@@ -58,6 +62,15 @@ def _prepare_manifest(config: dict[str, Any], force_rebuild: bool) -> pd.DataFra
             output_root=dataset_root,
             num_authentic=120,
             num_tampered=120,
+            image_size=tuple(config["experiment"]["image_size"]),
+            seed=int(config["experiment"]["seed"]),
+        )
+    if source_dataset == "synthetic_splicing_demo" and not dataset_root.exists():
+        LOGGER.info("Synthetic splicing dataset not found. Generating dataset at %s", dataset_root)
+        generate_synthetic_splicing_dataset(
+            output_root=dataset_root,
+            num_authentic=240,
+            num_tampered=240,
             image_size=tuple(config["experiment"]["image_size"]),
             seed=int(config["experiment"]["seed"]),
         )
@@ -187,6 +200,8 @@ def run_pipeline(
     )
     save_split_table(split_manifest, config["paths"]["split_csv"])
     LOGGER.info("Split distribution:\n%s", split_manifest["split"].value_counts().to_string())
+    leakage_report = validate_no_split_leakage(split_manifest)
+    write_json(Path(config["paths"]["reports_dir"]) / "split_leakage_report.json", leakage_report)
 
     feature_table = extract_feature_table(manifest_split=split_manifest, config=config)
     feature_path = Path(config["paths"]["metrics_dir"]) / "feature_table.csv"
@@ -214,6 +229,9 @@ def run_pipeline(
     robustness_df, _ = run_robustness_suite(test_manifest=test_manifest, method_results=method_results, config=config)
     robustness_path = Path(config["paths"]["metrics_dir"]) / "robustness_metrics.csv"
     robustness_df.to_csv(robustness_path, index=False)
+    localization_df = run_localization_suite(test_manifest=test_manifest, config=config)
+    localization_path = Path(config["paths"]["metrics_dir"]) / "localization_metrics.csv"
+    localization_df.to_csv(localization_path, index=False)
 
     error_df = build_error_analysis_table(method_results[primary_method].predictions["test"], top_k=40)
     error_path = Path(config["paths"]["reports_dir"]) / "error_analysis.csv"
@@ -225,7 +243,7 @@ def run_pipeline(
 
     assumptions = [
         "Dataset labels are inferred from folder names authentic/tampered (or aliases in manifest module).",
-        "Current implementation targets image-level binary classification, not pixel-level localization.",
+        "Localization metrics use proxy maps (CFA/PRNU/ManTra-like mask) against available ground-truth masks.",
         "Statistical test compares per-image correctness vectors on the same test split.",
         "Demo mode uses synthetic data and should not be interpreted as scientific benchmark.",
     ]
@@ -236,6 +254,7 @@ def run_pipeline(
         summary_df=summary_df,
         bootstrap_df=bootstrap_df,
         robustness_df=robustness_df,
+        localization_df=localization_df,
         stats_df=stats_df,
         error_df=error_df,
         assumptions=assumptions,
@@ -249,6 +268,7 @@ def run_pipeline(
         "bootstrap_path": str(bootstrap_path),
         "stats_path": str(stats_path),
         "robustness_path": str(robustness_path),
+        "localization_path": str(localization_path),
         "error_analysis_path": str(error_path),
         "report_path": str(report_path),
         "artifact_bundle_path": export_paths["bundle"],
@@ -256,5 +276,26 @@ def run_pipeline(
         "model_version": export_paths["model_version"],
     }
     write_json(Path(config["paths"]["reports_dir"]) / "pipeline_result.json", result)
+
+    if bool(config.get("baseline", {}).get("freeze_enabled", False)):
+        baseline_name = str(config.get("baseline", {}).get("snapshot_name", run_name))
+        baseline_dir = Path(config["paths"]["artifacts_dir"]) / "baseline_snapshots" / baseline_name
+        baseline_dir.mkdir(parents=True, exist_ok=True)
+        for path_key in [
+            "summary_metrics_path",
+            "bootstrap_path",
+            "stats_path",
+            "robustness_path",
+            "localization_path",
+            "report_path",
+            "artifact_bundle_path",
+            "primary_artifact_path",
+        ]:
+            source = Path(result[path_key])
+            if source.exists():
+                shutil.copy2(source, baseline_dir / source.name)
+        config_copy = baseline_dir / "config_snapshot.yaml"
+        config_copy.write_text(Path(config_path).read_text(encoding="utf-8"), encoding="utf-8")
+
     LOGGER.info("Pipeline finished. Primary artifact: %s", export_paths["primary"])
     return result

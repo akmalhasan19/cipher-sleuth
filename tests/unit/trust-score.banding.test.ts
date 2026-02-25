@@ -7,6 +7,9 @@ function buildAgentResult(agentId: AgentId, trustDelta: number): AgentResult {
     "exif-bot": "Metadata Investigator (Exif-Bot)",
     "noise-bot": "ELA Specialist (Noise-Bot)",
     "dwt-svd-bot": "Integrity Guard (DWT-SVD Bot)",
+    "cfa-bot": "CFA Artifact Monitor",
+    "mantra-bot": "ManTra Neural Splicing Detector",
+    "prnu-bot": "PRNU Noise Fingerprint Analyst",
   };
 
   return {

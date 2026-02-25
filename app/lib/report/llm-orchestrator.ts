@@ -41,6 +41,27 @@ function extractRiskSignals(
         signals.push(`Watermark integrity status is ${status}.`);
       }
     }
+
+    if (agent.agentId === "cfa-bot") {
+      const score = Number(agent.rawResult.score ?? 0);
+      if (Number.isFinite(score) && score >= 0.45) {
+        signals.push(`CFA inconsistency score is elevated (${score.toFixed(3)}).`);
+      }
+    }
+
+    if (agent.agentId === "mantra-bot") {
+      const score = Number(agent.rawResult.score ?? 0);
+      if (Number.isFinite(score) && score >= 0.45) {
+        signals.push(`Neural splicing detector (ManTra) score is elevated (${score.toFixed(3)}).`);
+      }
+    }
+
+    if (agent.agentId === "prnu-bot") {
+      const score = Number(agent.rawResult.score ?? 0);
+      if (Number.isFinite(score) && score >= 0.45) {
+        signals.push(`PRNU fingerprint inconsistency score is elevated (${score.toFixed(3)}).`);
+      }
+    }
   }
 
   if (signals.length === 0) {

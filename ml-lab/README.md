@@ -5,11 +5,15 @@ Engine eksperimen terpisah untuk deteksi manipulasi citra berbasis:
 - `DWT-SVD-only`
 - `ELA+DWT`
 - `ELA+DWT-SVD` (metode utama usulan)
+- `CFA-only`
+- `PRNU-only`
+- `ManTra-like + CFA (+ PRNU)` hybrid track
 
 Fokus implementasi:
 - Reproducibility (`seed`, config terpusat, split konsisten)
 - Perbandingan adil antar-metode pada split identik
 - Robustness stress test (JPEG, resize, blur, noise, chained)
+- Localization metrics (IoU/Dice/pixel-F1) saat `mask_path` tersedia
 - Output artefak inferensi untuk dipanggil dari web app Next.js
 
 ## Struktur
@@ -67,10 +71,17 @@ Catatan deployment:
 python scripts/run_pipeline.py --config configs/demo.yaml --force-rebuild-manifest
 ```
 
+Hybrid splicing scope (CFA + PRNU + ManTra-like):
+
+```bash
+python scripts/run_pipeline.py --config configs/hybrid_mantra_cfa_prnu.yaml --force-rebuild-manifest
+```
+
 Output utama:
 - `artifacts/models/final_primary_artifact.joblib`
 - `artifacts/metrics/main_metrics.csv`
 - `artifacts/metrics/robustness_metrics.csv`
+- `artifacts/metrics/localization_metrics.csv`
 - `artifacts/metrics/method_stats.csv`
 - `artifacts/reports/experiment_report.md`
 
@@ -97,6 +108,14 @@ python scripts/run_pipeline.py --config configs/casia2.yaml --force-rebuild-mani
 ```bash
 python scripts/run_ablation.py --config configs/default.yaml
 python scripts/run_stress_test.py --config configs/default.yaml --bundle artifacts/models/model_bundle.joblib
+```
+
+## Cloud GPU Helpers (ManTra Track)
+
+```bash
+python scripts/prepare_cloud_bundle.py --dataset-root data/raw/synthetic_splicing_demo
+python scripts/run_mantra_finetune.py --config configs/hybrid_mantra_cfa_prnu.yaml
+python scripts/sync_cloud_artifacts.py --cloud-dir C:\path\to\downloaded\artifacts
 ```
 
 ## Primary Tuning (ELA+DWT-SVD vs baseline ELA+DWT)
@@ -186,6 +205,9 @@ Mapping awal yang direkomendasikan:
 - `mlResult.prediction.probability` -> skor manipulasi utama
 - `mlResult.scores.elaScore` -> sinyal ELA agent
 - `mlResult.scores.dwtsvdScore` -> sinyal DWT-SVD agent
+- `mlResult.scores.cfaScore` -> sinyal CFA artifact
+- `mlResult.scores.mantraScore` -> sinyal ManTra-like detector
+- `mlResult.scores.prnuScore` -> sinyal PRNU residual
 
 ## Artefak & Reproducibility
 
@@ -197,6 +219,7 @@ Jejak run disimpan di:
 
 Asumsi eksplisit:
 1. Implementasi saat ini fokus ke image-level binary classification.
-2. Uji statistik dilakukan terhadap vektor correctness per-image antar-metode pada test split identik.
-3. Robustness menggunakan perturbasi sintetis terkontrol (bukan simulasi lengkap semua pipeline platform sosial).
-4. Hasil demo synthetic hanya untuk validasi pipeline teknis, bukan klaim performa ilmiah.
+2. Localization metrics adalah evaluasi proxy berbasis mask tersedia (tidak selalu dari deep model full-resolution).
+3. Uji statistik dilakukan terhadap vektor correctness per-image antar-metode pada test split identik.
+4. Robustness menggunakan perturbasi sintetis terkontrol (bukan simulasi lengkap semua pipeline platform sosial).
+5. Hasil demo synthetic hanya untuk validasi pipeline teknis, bukan klaim performa ilmiah.

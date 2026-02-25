@@ -43,6 +43,15 @@ function inferKeyFinding(agent: AgentResult): string {
   if (agent.agentId === "noise-bot") {
     return `ELA anomaly tier: ${String(agent.rawResult.anomalyTier ?? "unknown")}`;
   }
+  if (agent.agentId === "cfa-bot") {
+    return `CFA inconsistency score: ${String(agent.rawResult.cfaScore ?? "unknown")}`;
+  }
+  if (agent.agentId === "mantra-bot") {
+    return `ManTra score: ${String(agent.rawResult.mantraScore ?? "unknown")}`;
+  }
+  if (agent.agentId === "prnu-bot") {
+    return `PRNU score: ${String(agent.rawResult.prnuScore ?? "unknown")}`;
+  }
   return `Watermark status: ${String(agent.rawResult.watermarkStatus ?? "unknown")}`;
 }
 
